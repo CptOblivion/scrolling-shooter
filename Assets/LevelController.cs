@@ -96,13 +96,14 @@ public class LevelController : MonoBehaviour
     private void Awake()
     {
         //initialize basic links
+        GlobalTools.canvas_Display = displayCanvas;
         tf = GetComponent<Transform>();
         cam = GetComponent<Camera>();
 
         //initialize input stuff
         playerInput = GetComponent<PlayerInput>();
-        actionMapGameplay = playerInput.actions.GetActionMap("Gameplay");
-        actionMapMenus = playerInput.actions.GetActionMap("Menus");
+        actionMapGameplay = playerInput.actions.FindActionMap("Gameplay");
+        actionMapMenus = playerInput.actions.FindActionMap("Menus");
 
         //initialize audio stuff
         GlobalTools.audioMixer = audioMixer;
@@ -124,8 +125,8 @@ public class LevelController : MonoBehaviour
     }
     void Start()
     {
-        CloseSettings();
-        Unpause();
+        //CloseSettings();
+        //Unpause();
 
         displayCanvas.gameObject.SetActive(true);
         loadingCanvas.gameObject.SetActive(true);
@@ -138,6 +139,8 @@ public class LevelController : MonoBehaviour
         PlayerWidth = playerCollider.bounds.extents.x;
 
         ScrollSpeedLerpSpeed = 0;
+
+        if (GlobalTools.level) Level = GlobalTools.level;
         LoadAssets = new Dictionary<string, ResourceRequest>();
         if (Level != null) levelLines = Level.text.Split(new string[] {"\r\n", "\n"}, System.StringSplitOptions.None);
         levelParsed = new List<string[]>();
@@ -213,6 +216,8 @@ public class LevelController : MonoBehaviour
                 hudCanvas.gameObject.SetActive(true);
                 Player.gameObject.SetActive(true);
                 loadingCanvas.gameObject.SetActive(false);
+                //pauseCanvas.gameObject.SetActive(true);
+                //settingsCanvas.gameObject.SetActive(true);
                 playerInput.SwitchCurrentActionMap("Menus");
                 playerInput.SwitchCurrentActionMap("Gameplay");
                 Debug.Log(debugString);
@@ -472,6 +477,16 @@ public class LevelController : MonoBehaviour
                                 musicLerpProgress = 1;
                                 musicLerpSpeed = 1 / float.Parse(argument[1]);
                             }
+                            else if (argument[0] == "Intro")
+                            {
+                                AudioClip introMusic = Resources.Load("Sounds/Music/" + argument[1]) as AudioClip;
+                                musicSources[currentMusicSource ? 1:0].clip = introMusic;
+                                musicSources[currentMusicSource ? 1:0].Play();
+                                musicSources[currentMusicSource ? 1 : 0].volume = 1;
+                                musicSources[currentMusicSource ? 1 : 0].loop = false;
+                                musicSources[currentMusicSource ? 0 : 1].Stop();
+                                musicSources[currentMusicSource ? 0 : 1].PlayScheduled(AudioSettings.dspTime + introMusic.length);
+                            }
                         }
                     }
 
@@ -625,7 +640,7 @@ public class LevelController : MonoBehaviour
 
     public void CloseSettings()
     {
-        settingsCanvas.gameObject.SetActive(false); 
+        settingsCanvas.gameObject.GetComponent<Settings>().CloseSettings(); 
         pauseCanvas.gameObject.SetActive(true);
     }
 

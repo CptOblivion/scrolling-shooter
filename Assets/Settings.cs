@@ -2,92 +2,106 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-
+using UnityEngine.InputSystem;
+using UnityEngine.Audio;
 public class Settings : MonoBehaviour
 {
-    CanvasScaler canvasScaler;
+    public AudioMixer mixer;
     public Camera uiCam;
+    Canvas settingsCanvas;
+    public GlobalTools.ScalingModeTypes StartingScalingMode;
+
+    public Slider[] VolSliders;
+    public Text labelScalingMode;
 
     public int FrameRate = 60;
-    public enum ScalingModeTypes { FitToScreen, NearestPixelMultiple}
-    public ScalingModeTypes ScalingMode;
-    float TargetWidth; //hook for changing the pixelart resolution, just in case
-    float TargetHeight;
 
+    private void Awake()
+    {
+        if (uiCam == null) Debug.LogError("No UI Camera Selected!");
+        settingsCanvas = GetComponent<Canvas>();
 
-    // Start is called before the first frame update
+    }
     void Start()
     {
-        TargetWidth = 640;
-        TargetHeight = 480;
-        canvasScaler = GetComponent<CanvasScaler>();
+        GlobalTools.TargetWidth = 640;
+        GlobalTools.TargetHeight = 480;
+        GlobalTools.ScalingMode = StartingScalingMode;
         SetFrameRate(FrameRate);
-        UpdateScalingMode();
+        GlobalTools.globalTools.UpdateScalingMode();
     }
 
-    void Update()
+    private void OnEnable()
     {
-        if (ScalingMode == ScalingModeTypes.NearestPixelMultiple) UpdateScalingMode(); //in case of window resizes
-    }
-
-    public void UpdateScalingMode()
-    {
-        if(ScalingMode == ScalingModeTypes.FitToScreen)
+        //set volume sliders to their current values
+        float value;
+        string[] volGroups = new string[] { "VolMaster", "VolMusic", "VolSFX" };
+        for(int i = 0; i<3; i++)
         {
-            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            uiCam.orthographicSize = 24;
+            mixer.GetFloat(volGroups[i], out value);
+            value = Mathf.Pow(10, value/20);
+            VolSliders[i].value = value;
         }
-        else
-        {
-            float ScaleReference;
-            float ScreenDimension;
-            float ScreenRatio = (float)Screen.height / (float)Screen.width;
-            float TargetRatio = TargetHeight / TargetWidth;
-            if (ScreenRatio < TargetRatio)
-            {
-                ScaleReference = TargetHeight;
-                ScreenDimension = Screen.height - (Screen.height % ScaleReference);
-            }
-            else
-            {
-                ScaleReference = TargetWidth;
-                ScreenDimension = Screen.width - (Screen.width % ScaleReference);
-            }
-
-            float scaleFactor = ScreenDimension/ScaleReference;
-
-            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
-            canvasScaler.scaleFactor = scaleFactor;
-            //don't forget to scale the UI camera inversely to the game render size
-            uiCam.orthographicSize = ((float)Screen.height / (TargetHeight * scaleFactor)) * 24;
-        }
+        labelScalingMode.text = GlobalTools.ScalingModeNames[(int)GlobalTools.ScalingMode];
     }
-
     public void SetScalingMode(int scalingMode)
     {
-        int scalingModeLength = System.Enum.GetValues(typeof(ScalingModeTypes)).Length;
+        int scalingModeLength = System.Enum.GetValues(typeof(GlobalTools.ScalingModeTypes)).Length;
         if (scalingMode >= scalingModeLength) Debug.Log("Invalid scaling mode!");
-        else ScalingMode = (ScalingModeTypes)scalingMode;
-        UpdateScalingMode();
+        else GlobalTools.ScalingMode = (GlobalTools.ScalingModeTypes)scalingMode;
+        GlobalTools.globalTools.UpdateScalingMode();
+        labelScalingMode.text = GlobalTools.ScalingModeNames[(int)GlobalTools.ScalingMode];
     }
 
     public void CycleScalingMode(bool up = true)
     {
-        int scalingModeLength = System.Enum.GetValues(typeof(ScalingModeTypes)).Length;
+        int scalingModeLength = System.Enum.GetValues(typeof(GlobalTools.ScalingModeTypes)).Length;
         if (up)
         {
-            ScalingMode++;
-            if ((int)ScalingMode == scalingModeLength) ScalingMode = (ScalingModeTypes)0;
+            GlobalTools.ScalingMode++;
+            if ((int)GlobalTools.ScalingMode == scalingModeLength) GlobalTools.ScalingMode = (GlobalTools.ScalingModeTypes)0;
         }
         else
         {
-            if ((int)ScalingMode == 0) ScalingMode = (ScalingModeTypes)scalingModeLength;
-            ScalingMode--;
+            if ((int)GlobalTools.ScalingMode == 0) GlobalTools.ScalingMode = (GlobalTools.ScalingModeTypes)scalingModeLength;
+            GlobalTools.ScalingMode--;
         }
-        UpdateScalingMode();
+        GlobalTools.globalTools.UpdateScalingMode();
+        labelScalingMode.text = GlobalTools.ScalingModeNames[(int)GlobalTools.ScalingMode];
     }
     public void SetFrameRate(int frameRate)
     {
         Application.targetFrameRate = frameRate;
+    }
+
+    public void OnCloseSettings(InputAction.CallbackContext context)
+    {
+        CloseSettings();
+    }
+    public void CloseSettings()
+    {
+        settingsCanvas.gameObject.SetActive(false);
+    }
+
+    float VolumeCurve(float volume)
+    {
+        volume = Mathf.Clamp(volume, .0001f, 1);
+
+        volume = Mathf.Log10(volume) * 20;
+        return volume;
+    }
+    public void SetVolMain(float volume)
+    {
+        mixer.SetFloat("VolMaster",VolumeCurve(volume));
+    }
+    public void SetVolMusic(float volume)
+    {
+        mixer.SetFloat("VolMusic", VolumeCurve(volume));
+
+    }
+    public void SetVolSFX(float volume)
+    {
+        mixer.SetFloat("VolSFX", VolumeCurve(volume));
+
     }
 }

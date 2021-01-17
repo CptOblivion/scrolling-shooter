@@ -22,14 +22,15 @@
 
 1 DisplayText "LET" 3.75 Position=0,15,15 Color=0,0,0,.5
 +0 PlaySound PlayerDanger
-+.25 DisplayText "THE" 3.5 Position=0,7.5,15 Color=0,0,0,.5
++.3 DisplayText "THE" 3.5 Position=0,7.5,15 Color=0,0,0,.5
 +0 PlaySound PlayerDanger
-+.25 DisplayText "GAME" 3.25 Position=0,0,15 Color=0,0,0,.5
++.3 DisplayText "GAME" 3.25 Position=0,0,15 Color=0,0,0,.5
 +0 PlaySound PlayerDanger
-+.25 DisplayText "BEGIN!" 3 Position=0,-7.5,15 Color=0,0,0,.5
++.3 DisplayText "BEGIN!" 3 Position=0,-7.5,15 Color=0,0,0,.5
 +0 PlaySound PlayerDanger
 
-+.25 PlayMusic Music_Level
+//+.25 PlayMusic Music_Level
++.3 PlayMusic Peppy_Level_Main_Loop Intro=Peppy_Level_Main_Intro
 
 //start spawning enemies
 2 Spawn		Enemies/Enemy_Shooter	0,8,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
@@ -40,20 +41,20 @@
 +6.5 DisplayText "BOSS" 3 Position=0,15,0 Color=1,0,0,1
 +0 DisplayText "INCOMING!!!!" 3 Position=0,5,0 Color=1,0,0,1
 +0 PlaySound ShittyKlaxxon Pitch=.5
-+1 PlayMusic Music_Boss
+//+1 PlayMusic Music_Boss
 
 +2.25 HoldForDeath Count=0
 +0 Spawn	Enemies/Enemy_Turret_Artillery 0,40,10 DeathEvent HealthDelay=4 SendMessage=SetFireStartup,float,4
 +3 ScrollSpeed 0 Lerp=1
 +0 HoldForDeath Additive
 +0 ScrollSpeed 24 Lerp=.2
-+0 PlayMusic None Lerp=.5
+//+0 PlayMusic None Lerp=.5
 
 +.5 DisplayText "The Win! ...is you" 3 Color=0,1,0,1 Size=4
 +1 DisplayText "Just Kidding" 2 Color=.5,0,0,1
 +0 PlaySound ShittyKlaxxon
 +.2 PlaySound ShittyKlaxxon Pitch=.8
-+.2 PlayMusic Music_Level
+//+.2 PlayMusic Music_Level
 
 +0 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
 +.25 Spawn	Enemies/Enemy_Shooter	0,8,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
@@ -73,7 +74,7 @@
 +4 Spawn Powerup 0,22,0
 
 +1 HoldForDeath Count=0
-+0 PlayMusic Music_Boss Lerp=.5
+//+0 PlayMusic Music_Boss Lerp=.5
 +.05	Spawn Enemies/Enemy_Turret_Artillery 0,40,10 DeathEvent HealthDelay=6 SendMessage=SetFireStartup,float,4
 +.5		Spawn Enemies/Enemy_Turret_Artillery -10,40,10 DeathEvent HealthDelay=6 SendMessage=SetFireStartup,float,4
 +.05	Spawn Enemies/Enemy_Turret_Artillery 10,40,10 DeathEvent HealthDelay=5.5 SendMessage=SetFireStartup,float,4

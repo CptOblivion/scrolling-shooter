@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2295819235505220975}
   - component: {fileID: 3127477528791622549}
   m_Layer: 0
-  m_Name: EffectMachinegunHit
+  m_Name: Effect_Hit_Machinegun
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -44,7 +44,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a5b80600c9b4cd347bb0665ac7f39b10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  parallax: 1
+  parallax: 0
   Life: 0.2
 --- !u!1001 &8691125676830937963
 PrefabInstance:

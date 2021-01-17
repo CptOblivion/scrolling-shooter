@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a5b80600c9b4cd347bb0665ac7f39b10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  parallax: 1
+  parallax: 0
   Life: 0.2
 --- !u!82 &304899050212180533
 AudioSource:

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+﻿    using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -16,15 +16,14 @@ public class MenuActivation : MonoBehaviour
     {
         tf = this.transform;
         eventSystem = FindObjectOfType<EventSystem>();
-
     }
-
-    void OnEnable()
+    private void OnEnable()
     {
         if (DefaultMenuItem) eventSystem.SetSelectedGameObject(DefaultMenuItem);
         foreach (Button button in tf.GetComponentsInChildren<Button>())
         {
-            
+
         }
+
     }
 }

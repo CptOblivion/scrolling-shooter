@@ -2,20 +2,77 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.UI;
+using System.ComponentModel;
 
 public class GlobalTools : MonoBehaviour
 {
     public static GlobalTools globalTools;
     public static Camera renderCam;
+    public static Camera uiCam;
     public static LevelController levelController;
     public static AudioMixer audioMixer;
+    public static Canvas canvas_Display;
+    public static CanvasScaler displayScaler;
+    public static TextAsset level;
+
+    public enum ScalingModeTypes { FitToScreen, NearestPixelMultiple }
+    public static string[] ScalingModeNames = new string[] { "FIT TO SCREEN", "NEAREST PIXEL"};
+    public static ScalingModeTypes ScalingMode;
+    public static float TargetWidth, TargetHeight; //hooks for changing the pixelart resolution, just in case
 
     void Awake()
     {
         globalTools = this;
         renderCam = this.GetComponent<Camera>();
+        foreach (Camera cam in GetComponentsInChildren<Camera>())
+        {
+            if (cam.name == "UICam")
+            {
+                uiCam = cam;
+                break;
+            }
+        }
+        //uiCam = GetComponentInChildren<Camera>();
         levelController = this.GetComponent<LevelController>();
+        displayScaler = canvas_Display.GetComponent<CanvasScaler>();
 
+    }
+    void Update()
+    {
+        if (ScalingMode == ScalingModeTypes.NearestPixelMultiple) this.UpdateScalingMode(); //in case of window resizes
+    }
+    public void UpdateScalingMode()
+    {
+        if (ScalingMode == ScalingModeTypes.FitToScreen)
+        {
+            displayScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            uiCam.orthographicSize = 24;
+        }
+        else
+        {
+            float ScaleReference;
+            float ScreenDimension;
+            float ScreenRatio = (float)Screen.height / (float)Screen.width;
+            float TargetRatio = TargetHeight / TargetWidth;
+            if (ScreenRatio < TargetRatio)
+            {
+                ScaleReference = TargetHeight;
+                ScreenDimension = Screen.height - (Screen.height % ScaleReference);
+            }
+            else
+            {
+                ScaleReference = TargetWidth;
+                ScreenDimension = Screen.width - (Screen.width % ScaleReference);
+            }
+
+            float scaleFactor = ScreenDimension / ScaleReference;
+
+            displayScaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            displayScaler.scaleFactor = scaleFactor;
+            //don't forget to scale the UI camera inversely to the game render size
+            uiCam.orthographicSize = ((float)Screen.height / (TargetHeight * scaleFactor)) * 24;
+        }
     }
     public static float PixelSize()
     {
@@ -65,7 +122,7 @@ public class GlobalTools : MonoBehaviour
         audioSource.clip = audioClip;
         audioSource.pitch = Pitch;
         audioSource.Play();
-        if (audioMixer) audioSource.outputAudioMixerGroup = audioMixer.FindMatchingGroups("Sound Effects")[0];
+        if (audioMixer) audioSource.outputAudioMixerGroup = audioMixer.FindMatchingGroups("SFX")[0];
         Destroy(tempOb, audioClip.length * (1 / Pitch));
         return audioSource;
     }

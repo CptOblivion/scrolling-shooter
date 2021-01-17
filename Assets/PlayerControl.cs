@@ -104,7 +104,7 @@ public class PlayerControl : MonoBehaviour
         if (Time.timeScale > 0) //if we're not paused
         {
             InputActionMap gameplayActions = GlobalTools.levelController.actionMapGameplay;
-            Vector2 inputMoveDir = gameplayActions.GetAction("Move").ReadValue<Vector2>();
+            Vector2 inputMoveDir = gameplayActions.FindAction("Move").ReadValue<Vector2>();
 
             //controls stuff
 
@@ -245,7 +245,7 @@ public class PlayerControl : MonoBehaviour
 
             if (fireDelayCounter <= 0)
             {
-                if (gameplayActions.GetAction("Fire").phase == InputActionPhase.Started)//insert "fire button pressed" here
+                if (gameplayActions.FindAction("Fire").phase == InputActionPhase.Started)//insert "fire button pressed" here
                 {
                     FireGuns(shotType);
                     fireDelayCounter = shotType.GetComponent<Bullet>().fireDelay;
@@ -255,7 +255,7 @@ public class PlayerControl : MonoBehaviour
 
             if (specialDelayCounter <= 0)
             {
-                if (gameplayActions.GetAction("Special Fire").phase == InputActionPhase.Started) //insert "special button pressed" here
+                if (gameplayActions.FindAction("Special Fire").phase == InputActionPhase.Started) //insert "special button pressed" here
                 {
                     FireGuns(specialType);
                     specialDelayCounter = specialType.GetComponent<Bullet>().fireDelay;

@@ -6,7 +6,7 @@ AudioMixerGroupController:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Sound Effects
+  m_Name: SFX
   m_AudioMixer: {fileID: 24100000}
   m_GroupID: a743ef696516bbd4aaca475031d60d40
   m_Children: []
@@ -81,7 +81,13 @@ AudioMixerController:
   m_SuspendThreshold: -80
   m_EnableSuspend: 1
   m_UpdateMode: 0
-  m_ExposedParameters: []
+  m_ExposedParameters:
+  - guid: 4c3bbc46715235c44ab451418e38b252
+    name: VolMaster
+  - guid: 0f193f7f4731f4047b11ebda9dcf2071
+    name: VolMusic
+  - guid: 33d9df591b58b5148bffc4de46a7282b
+    name: VolSFX
   m_AudioMixerGroupViews:
   - guids:
     - 148e22291b9737b4890d38c615b66ff0
@@ -134,5 +140,9 @@ AudioMixerSnapshotController:
   m_Name: Snapshot
   m_AudioMixer: {fileID: 24100000}
   m_SnapshotID: 82f7fd5b01e2d984c937145bbb419be6
-  m_FloatValues: {}
+  m_FloatValues:
+    7d584792af30c3a4d8c56c0cc13a1eb0: 1
+    4c3bbc46715235c44ab451418e38b252: -10
+    33d9df591b58b5148bffc4de46a7282b: -10
+    0f193f7f4731f4047b11ebda9dcf2071: -10
   m_TransitionOverrides: {}

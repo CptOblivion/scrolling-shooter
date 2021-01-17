@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e62990e948dfe2e49b2554ff1f989416, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  axis: 0
+  axis: 5
 --- !u!114 &4006971995784760253
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -78,7 +78,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e62990e948dfe2e49b2554ff1f989416, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  axis: 0
+  axis: 5
 --- !u!114 &8936979552769239579
 MonoBehaviour:
   m_ObjectHideFlags: 0
