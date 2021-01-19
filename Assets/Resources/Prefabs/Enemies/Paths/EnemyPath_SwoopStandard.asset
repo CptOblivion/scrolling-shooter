@@ -12,24 +12,35 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02b38abe94bd5e94da663d07fca4bb25, type: 3}
   m_Name: EnemyPath_SwoopStandard
   m_EditorClassIdentifier: 
-  PathScale: 2.63
-  TotalTime: 1.1750001
+  PathStart: 0
+  PathEnd: 0
+  PathScale: 3
+  TotalTime: 1.115047
   Path:
-  - Time: 1
-    Position: {x: -50, y: 0, z: 0}
+  - Time: 0
+    Position: {x: -50, y: 16.235315, z: 0}
     NodeCommand: 0
-  - Time: 0.5
-    Position: {x: -26.058544, y: -12.870346, z: 0}
+  - Time: 0.1127997
+    Position: {x: -44.006176, y: 6.6795936, z: 0}
     NodeCommand: 0
-  - Time: 0.17
-    Position: {x: -13.925142, y: -19.356977, z: 0}
+  - Time: 0.11758167
+    Position: {x: -35.86154, y: -1.8009399, z: 0}
     NodeCommand: 0
-  - Time: 0.17
-    Position: {x: 3.0673866, y: -24.191504, z: 0}
+  - Time: 0.11374444
+    Position: {x: -25.888733, y: -7.270954, z: 0}
     NodeCommand: 0
-  - Time: 0.21
-    Position: {x: 25.520103, y: -27.922285, z: 0}
+  - Time: 0.11890818
+    Position: {x: -14.410361, y: -10.375555, z: 0}
     NodeCommand: 0
-  - Time: 0.125
-    Position: {x: 50, y: -28.480383, z: 0}
+  - Time: 0.16218257
+    Position: {x: 1.315836, y: -14.340305, z: 0}
+    NodeCommand: 0
+  - Time: 0.16588452
+    Position: {x: 17.687284, y: -17.014832, z: 0}
+    NodeCommand: 0
+  - Time: 0.16235304
+    Position: {x: 33.843647, y: -18.61417, z: 0}
+    NodeCommand: 0
+  - Time: 0.16159287
+    Position: {x: 50, y: -18.923288, z: 0}
     NodeCommand: 0
