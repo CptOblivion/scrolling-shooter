@@ -6,8 +6,8 @@ using UnityEditor;
 public class Editor_EnemyPaths : Editor
 {
     //TODO: get actual screen height and maximum level width
-    float LevelHalfWidth = 50;
-    float LevelHalfHeight = 50f*(9f/16);
+    float LevelHalfHeight = 24;
+    float LevelHalfWidth = 24 * (16 / 9);
     int[] NodeControlArray;
     EnemyPath enemyPath;
 

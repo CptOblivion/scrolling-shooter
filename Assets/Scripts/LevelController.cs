@@ -56,6 +56,7 @@ public class LevelController : MonoBehaviour
     public TextAsset Level;
     string[] levelLines; //the level file broken into an array of strings
     List<string[]> levelParsed; //the level file parsed out into a list of lines, where each line is an array of strings (representing things like the file line number, the position or time along the level for the command, and the command itself)
+    //TODO: replace levelParsed string array entries with a class, which holds level position/time, command, and details (using enums for commands, etc)
 
     [Tooltip("The speed the level is scrolling at, used for parsing the level as well as moving background elements to make it appear like the camera is scrolling")]
     public float ScrollSpeed = 15;
