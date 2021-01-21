@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.Audio;
 
 [RequireComponent(typeof(Camera))]
-public class LevelController : MonoBehaviour
+public class OLD_LevelController : MonoBehaviour
 {
     //
     //dumb debug stuff, remove before proper build
@@ -14,18 +14,20 @@ public class LevelController : MonoBehaviour
 
     public float simulateLoading = 0;
 
+    //
+    //actual variables:
+    //
+    Transform tf;
+    Camera cam;
 
+    [HideInInspector]
+    public PlayerInput playerInput;
     [HideInInspector]
     public InputActionMap actionMapGameplay;
     [HideInInspector]
     public InputActionMap actionMapMenus;
 
-    public static LevelController current;
-
-    public PlayerInput playerInput;
-
-    List<string> LoadAssetList;
-    Dictionary<string,ResourceRequest> LoadAssets;
+    Dictionary<string, ResourceRequest> LoadAssets;
 
     [Tooltip("the Pause Canvas should be dropped in here, so we can enable it at runtime")]
     public Canvas pauseCanvas;
@@ -52,7 +54,8 @@ public class LevelController : MonoBehaviour
 
     [Tooltip("This is the level file we'll be parsing")]
     public TextAsset Level;
-
+    string[] levelLines; //the level file broken into an array of strings
+    List<string[]> levelParsed; //the level file parsed out into a list of lines, where each line is an array of strings (representing things like the file line number, the position or time along the level for the command, and the command itself)
     //TODO: replace levelParsed string array entries with a class, which holds level position/time, command, and details (using enums for commands, etc)
 
     [Tooltip("The speed the level is scrolling at, used for parsing the level as well as moving background elements to make it appear like the camera is scrolling")]
@@ -90,18 +93,13 @@ public class LevelController : MonoBehaviour
     readonly char[] charEquals = new char[] { '=' };
     readonly char[] charComma = new char[] { ',' };
 
-    Camera cam;
-
-    List<LevelParser.LevelLine> levelParsed;
-
-    int LevelCommandIndex = 0;
 
     private void Awake()
     {
-        current = this;
-        cam = GetComponent<Camera>();
         //initialize basic links
         GlobalTools.canvas_Display = displayCanvas;
+        tf = GetComponent<Transform>();
+        cam = GetComponent<Camera>();
 
         //initialize input stuff
         playerInput = GetComponent<PlayerInput>();
@@ -112,7 +110,7 @@ public class LevelController : MonoBehaviour
         GlobalTools.audioMixer = audioMixer;
         AudioSource sourceA = this.gameObject.AddComponent<AudioSource>();
         AudioSource sourceB = this.gameObject.AddComponent<AudioSource>();
-        musicSources = new AudioSource[] {sourceA,sourceB};
+        musicSources = new AudioSource[] { sourceA, sourceB };
         foreach (AudioSource audioSource in musicSources)
         {
             audioSource.loop = true;
@@ -143,18 +141,51 @@ public class LevelController : MonoBehaviour
 
         ScrollSpeedLerpSpeed = 0;
 
-        //TODO: check what this is about
         if (GlobalTools.level) Level = GlobalTools.level;
-
         LoadAssets = new Dictionary<string, ResourceRequest>();
+        if (Level != null) levelLines = Level.text.Split(new string[] { "\r\n", "\n" }, System.StringSplitOptions.None);
+        levelParsed = new List<string[]>();
+        for (int i = 0; i < levelLines.Length; i++)
+        {
+            //add the line to the parsed list, if it's not a comment or blank
+            if (levelLines[i] != "" && (levelLines[i].Substring(0, 2) != "//"))
+            {
+                string line = (i + 1).ToString() + " " + levelLines[i]; //add the file line to the front of the line (since the resulting array might be shorter than the file due to comments and blank lines, we can't just track it with an int)
 
-        if (Level != null)
-        {
-            levelParsed = LevelParser.ParseFile(Level, out LoadAssetList);
-        }
-        foreach(string assetPath in LoadAssetList)
-        {
-            LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));
+
+                if (line.Contains("//")) //trim comments
+                {
+                    int commentIndex = line.IndexOf("//");
+                    line = line.Substring(0, commentIndex);
+                }
+                line = line.TrimEnd(charSpace);
+                string[] lineParsed = line.Split(charSpace, System.StringSplitOptions.RemoveEmptyEntries);
+                levelParsed.Add(lineParsed);
+
+                //check for objects to load
+                if (lineParsed[2] == "Spawn")
+                {
+                    string prefabPath = "Prefabs/" + lineParsed[3];
+                    if (!LoadAssets.ContainsKey(prefabPath)) LoadAssets.Add(prefabPath, Resources.LoadAsync(prefabPath));
+
+                    foreach (string argument in lineParsed)
+                    {
+                        if (argument.StartsWith("Animation="))
+                        {
+                            string animPath = "Animations/" + argument.Substring(10);
+                            if (!LoadAssets.ContainsKey(animPath)) LoadAssets.Add(animPath, Resources.LoadAsync(animPath));
+                        }
+                    }
+                }
+                else if (lineParsed[2] == "PlaySound")
+                {
+                    string prefabPath = "Sounds/" + lineParsed[3];
+                    if (!LoadAssets.ContainsKey(prefabPath)) LoadAssets.Add(prefabPath, Resources.LoadAsync(prefabPath));
+                }
+
+
+                //resulting format is {"LevelFileLine", "Position", "command", "arguments..."}
+            }
         }
     }
 
@@ -179,7 +210,7 @@ public class LevelController : MonoBehaviour
                 loading = false;
 
                 string debugString = "Loaded\n";
-                foreach(string name in LoadAssets.Keys)
+                foreach (string name in LoadAssets.Keys)
                 {
                     debugString += name + "\n";
                 }
@@ -194,7 +225,7 @@ public class LevelController : MonoBehaviour
             }
         }
 
-        if(!loading)
+        if (!loading)
         {
             playerCollider = Player.gameObject.GetComponent<CompositeCollider2D>();
             PlayerWidth = playerCollider.bounds.extents.x;
@@ -214,16 +245,15 @@ public class LevelController : MonoBehaviour
                 {
                     float NextCommandDistance;
                     float LevelProgress;
-                    NextCommandDistance = levelParsed[LevelCommandIndex].Position;
-
-                    //TODO: look over this, figure out what it's doing and why it's this way
-                    if (levelParsed[LevelCommandIndex].RelativePosition)
+                    if (levelParsed[0][1].Substring(0, 1) == "+") //if there's a "+" before the position, it's a relative offset from the last command
                     {
+                        NextCommandDistance = float.Parse(levelParsed[0][1].Substring(1)); //in local offset mode, we have to trim the "+" before the number
                         if (LevelScrollModeTime) LevelProgress = LevelTimeRelative;
                         else LevelProgress = LevelPositionRelative;
                     }
                     else //absolute offset mode
                     {
+                        NextCommandDistance = float.Parse(levelParsed[0][1]); //in absolute offset mode, we can just use the absolute number
                         if (LevelScrollModeTime) LevelProgress = LevelTime;
                         else LevelProgress = LevelPosition;
                     }
@@ -231,37 +261,21 @@ public class LevelController : MonoBehaviour
                     if (LevelProgress < NextCommandDistance) break; //we haven't reached the next command yet so let's just leave the loop until the next frame, alright?
 
                     //if we passed that break we've hit a command, so reset the relative position counters
-                    //TODO: these should probably be allowed to go negative, in case we passed several very close together but not 0 apart commands between frames (or is that already handled?)
                     LevelPositionRelative = 0;
                     LevelTimeRelative = 0;
-                    LevelParser.LevelLine line = levelParsed[LevelCommandIndex]; //the current line we're working on
+                    string[] line = levelParsed[0]; //the current line we're working on
 
-                    switch (line.Command)
+                    //I'm using an integer and counting it up because I don't doubt that I'll want to insert another dumb entry in the level file format for every line and this'll make the inevitable refactor a lot easier
+                    int LineEntryIndex = 0; //track the current entry of line that we're working on
+                    int LevelFileLine = int.Parse(line[LineEntryIndex]); LineEntryIndex++; //the line number of the file
+                    LineEntryIndex++;//this entry is the position/time code, but we don't need that now that we're past the loop test so there's no reason to assign a variable
+                    string command = line[LineEntryIndex]; LineEntryIndex++; //the command we'll be executing
+                    string[] arguments = new string[line.Length - LineEntryIndex]; //any subsequent entries are arguments
+                    for (; LineEntryIndex < line.Length; LineEntryIndex++)
                     {
-                        case LevelParser.AvailableCommands.LevelMode:
-                            if (line.Arguments[0].Value == "Distance") LevelScrollModeTime = false;
-                            else if (line.Arguments[0].Value == "Time") LevelScrollModeTime = true;
-                            break;
-                        case LevelParser.AvailableCommands.ScrollSpeed:
-                            break;
-                        case LevelParser.AvailableCommands.Spawn:
-                            break;
-                        case LevelParser.AvailableCommands.DisplayText:
-                            break;
-                        case LevelParser.AvailableCommands.PlaySound:
-                            break;
-                        case LevelParser.AvailableCommands.PlayMusic:
-                            break;
-                        case LevelParser.AvailableCommands.HoldForDeath:
-                            break;
-                        case LevelParser.AvailableCommands.VictoryAnim:
-                            break;
-                        case LevelParser.AvailableCommands.LevelEnd:
-                            break;
+                        arguments[LineEntryIndex - 3] = line[LineEntryIndex];
                     }
 
-                    //TODO: transcribe the long-ass if/else/else below into the switch above
-                    //  move error checking over into LevelParser.ParseLine
 
                     if (command == "LevelMode")
                     {
@@ -447,7 +461,7 @@ public class LevelController : MonoBehaviour
                     else if (command == "PlayMusic")
                     {
                         int i = 0;
-                        AudioClip music = Resources.Load("Sounds/Music/"+arguments[0]) as AudioClip; i++;
+                        AudioClip music = Resources.Load("Sounds/Music/" + arguments[0]) as AudioClip; i++;
                         currentMusicSource = !currentMusicSource;
 
                         musicSources[currentMusicSource ? 0 : 1].clip = music;
@@ -459,7 +473,7 @@ public class LevelController : MonoBehaviour
                         {
                             string[] argument = arguments[i].Split(charEquals);
 
-                            if (argument[0] == "Crossfade" || argument[0]== "Lerp")//why not be flexible, eh?
+                            if (argument[0] == "Crossfade" || argument[0] == "Lerp")//why not be flexible, eh?
                             {
                                 musicLerpProgress = 1;
                                 musicLerpSpeed = 1 / float.Parse(argument[1]);
@@ -467,8 +481,8 @@ public class LevelController : MonoBehaviour
                             else if (argument[0] == "Intro")
                             {
                                 AudioClip introMusic = Resources.Load("Sounds/Music/" + argument[1]) as AudioClip;
-                                musicSources[currentMusicSource ? 1:0].clip = introMusic;
-                                musicSources[currentMusicSource ? 1:0].Play();
+                                musicSources[currentMusicSource ? 1 : 0].clip = introMusic;
+                                musicSources[currentMusicSource ? 1 : 0].Play();
                                 musicSources[currentMusicSource ? 1 : 0].volume = 1;
                                 musicSources[currentMusicSource ? 1 : 0].loop = false;
                                 musicSources[currentMusicSource ? 0 : 1].Stop();
@@ -554,7 +568,7 @@ public class LevelController : MonoBehaviour
     }
 
     void LateUpdate()
-    { 
+    {
         //now we do horizontal scrolling (if the level is wider than the camera)
         //lateupdate to make sure we're doing this after the player position has been updated
         float camWidth = cam.orthographicSize * cam.aspect;
@@ -562,11 +576,11 @@ public class LevelController : MonoBehaviour
         float playerLimit = levelEdge - PlayerWidth; //this is how far horizontally the player can go in either direction
         float playerLimitNormalized = Player.position.x / playerLimit; //the player's x position in the level, where the edges are -1 and 1
         float scrollX = playerLimitNormalized * (levelEdge - camWidth); //the camera's horizontal position is based on the player's horizontal position in the level
-        
+
         if (scrollX > levelEdge - camWidth) scrollX = levelEdge - camWidth;//clamp that camera horizontal position:
         else if (scrollX < -(levelEdge - camWidth)) scrollX = -(levelEdge - camWidth);
 
-        transform.position = GlobalTools.PixelSnap(new Vector3(scrollX, 0, transform.position.z)); //set the position, snapped to pixel
+        tf.position = GlobalTools.PixelSnap(new Vector3(scrollX, 0, tf.position.z)); //set the position, snapped to pixel
 
     }
     public void HoldDecrement() //this function is to allow us to resume if the level file is waiting for enemies to die or whatnot
@@ -580,7 +594,7 @@ public class LevelController : MonoBehaviour
     }
     private void OnApplicationFocus(bool focus)
     {
-        if (!focus && Time.timeScale>0) Pause();
+        if (!focus && Time.timeScale > 0) Pause();
     }
 
     public void Pause()
@@ -593,7 +607,7 @@ public class LevelController : MonoBehaviour
         pauseCanvas.gameObject.SetActive(true);
         playerInput.SwitchCurrentActionMap("Menus");
 
-        foreach(AudioSource musicSource in musicSources)
+        foreach (AudioSource musicSource in musicSources)
         {
             musicSource.Pause();
         }
@@ -627,13 +641,13 @@ public class LevelController : MonoBehaviour
 
     public void CloseSettings()
     {
-        settingsCanvas.gameObject.GetComponent<Settings>().CloseSettings(); 
+        settingsCanvas.gameObject.GetComponent<Settings>().CloseSettings();
         pauseCanvas.gameObject.SetActive(true);
     }
 
     public void OnPause(InputAction.CallbackContext context)
     {
-            if (context.started) Pause();
+        if (context.started) Pause();
     }
 
     public void OnMenuCancel(InputAction.CallbackContext context)

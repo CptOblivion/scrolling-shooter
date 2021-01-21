@@ -12,10 +12,12 @@ public class LevelParser : MonoBehaviour
     public static readonly string strCommentStarter = "//";
     public static readonly string[] charNewline = new string[] {"\n", "\r\n" };
     public static readonly string strQuotes = "\"";
+    public static readonly string strAdditive = "+";
     public enum AvailableCommands { LevelMode, ScrollSpeed, Spawn, DisplayText, PlaySound, PlayMusic, HoldForDeath, VictoryAnim, LevelEnd}
     [System.Serializable]
     public class LevelLine
     {
+        public bool RelativePosition;
         public float Position;
         public AvailableCommands Command;
         public LevelCommandArugment[] Arguments;
@@ -23,6 +25,8 @@ public class LevelParser : MonoBehaviour
     [System.Serializable]
     public class Command
     {
+        //TODO: add bool
+        //TODO: can we store variables as string, but just use the bits directly and treat them as whatever type we want? Is that worth the trouble?
         public enum Types {None, Int, Float, String, Vector2, Vector3, Vector4}
         public Types[] RequiredArgs;
         public Dictionary<string, Types> OptionalArgs;
@@ -48,6 +52,7 @@ public class LevelParser : MonoBehaviour
         }
     }
 
+    //TODO: maybe add some set of valid parameters, for error checking (or just handle error checking at the end of the ParseLine function)
     static readonly Dictionary<AvailableCommands, Command> Commands = new Dictionary<AvailableCommands, Command> {
         
         {AvailableCommands.LevelMode,
@@ -118,11 +123,11 @@ public class LevelParser : MonoBehaviour
             new Command(null)},
     };
 
-    public static List<LevelLine> ParseFile(TextAsset file, out List<GameObject> prefabs)
+    public static List<LevelLine> ParseFile(TextAsset file, out List<string> LoadAssets)
     {
         //TODO: read file header first
         //TODO: populate prefabs list
-        prefabs = null;
+        LoadAssets = new List<string>();
 
 
         List<LevelLine> output = new List<LevelLine>();
@@ -151,7 +156,7 @@ public class LevelParser : MonoBehaviour
             CurrentLineString.TrimStart(charWhitespace);
             if (!CurrentLineString.StartsWith(strCommentStarter) && CurrentLineString.Length > 0)
             {
-                currentLine = ParseLine(CurrentLineString, LineCount);
+                currentLine = ParseLine(CurrentLineString, LineCount, LoadAssets);
                 if (currentLine != null)
                 {
                     output.Add(currentLine);
@@ -188,7 +193,7 @@ public class LevelParser : MonoBehaviour
         return Output;
     }
 
-    public static LevelLine ParseLine(string fileLine, int LineNumber)
+    public static LevelLine ParseLine(string fileLine, int LineNumber, List<string> LoadAssets)
     {
         //Debug.Log($">{fileLine}<");
         LevelLine outputLine = new LevelLine();
@@ -198,6 +203,8 @@ public class LevelParser : MonoBehaviour
 
         //line position
         GetNextChunk();
+
+        outputLine.RelativePosition = CurrentChunk.StartsWith(strAdditive);
         outputLine.Position = float.Parse(CurrentChunk);
         //Debug.Log($"Line position: {outputLine.Position}");
 
@@ -330,7 +337,40 @@ public class LevelParser : MonoBehaviour
         //TODO: test for duplicate instances of optional arguments (or just don't bother, it's probably fine)
 
         outputLine.Arguments = TempArgs.ToArray();
+        switch (outputLine.Command)
+        {
+            case AvailableCommands.Spawn:
+                TryAddLoadAsset("Prefabs/", 0);
+                for (int i = 0; i < outputLine.Arguments.Length; i++)
+                {
+                    if (outputLine.Arguments[i].Argument == "Animation")
+                    {
+                        TryAddLoadAsset("Animations/", i);
+                        break;
+                    }
+                    if (outputLine.Arguments[i].Argument == "Path")
+                    {
+                        TryAddLoadAsset("Paths/", i);
+                        break;
+                    }
+                }
+                break;
+            case AvailableCommands.PlaySound:
+                TryAddLoadAsset("Sounds/", 0);
+                break;
+        }
+
         return outputLine;
+
+        //TODO: hopefully, by passing LoadAssets as an argument in the function, we're using a pointer and not a copy- so adding to it should update the version that's returned up top. (confirm this)
+        void TryAddLoadAsset(string prefix, int arg)
+        {
+            string PrefabString = prefix + outputLine.Arguments[arg].Value;
+            if (!LoadAssets.Contains(PrefabString))
+            {
+                LoadAssets.Add(PrefabString);
+            }
+        }
 
         ///Gets next piece of text in the line, separated by a space. Returns false if the next chunk is empty or begins a comment (line end reached)
         bool GetNextChunk()
@@ -416,33 +456,6 @@ public class LevelParser : MonoBehaviour
                 }
                 return true;
             }
-
-            /*
-            bool TestVector(int size)
-            {
-                try
-                {
-                    int TestIndexStart = 0;
-                    int TestIndexEnd = ArgVal.IndexOfAny(charComma);
-                    for (int i = 0; i < 3; i++)
-                    {
-                        float.Parse(ArgVal.Substring(TestIndexStart, TestIndexEnd));
-                        TestIndexStart = TestIndexEnd + 1;
-                        if (i < size-1)
-                            TestIndexEnd = ArgVal.Substring(TestIndexStart).IndexOfAny(charComma);
-                        else
-                            TestIndexEnd = ArgVal.Length - 1;
-                    }
-                    return true;
-
-                }
-                catch
-                {
-                    ReturnError();
-                    return false;
-                }
-            }
-            */
         }
     }
 

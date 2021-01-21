@@ -7,7 +7,7 @@ public class Editor_EnemyPaths : Editor
 {
     //TODO: get actual screen height and maximum level width
     float LevelHalfHeight = 24;
-    float LevelHalfWidth = 24 * (16 / 9);
+    float LevelHalfWidth = 48;
     int[] NodeControlArray;
     EnemyPath enemyPath;
 

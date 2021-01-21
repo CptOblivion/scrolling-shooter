@@ -9,9 +9,9 @@ public class LevelEditor : MonoBehaviour
     int ActiveCommand;
     int[] SelectedCommands;
     readonly float ScreenHeight = 48;
-    readonly float LevelWidth = 48 * (16 / 9); //TODO: check if this is actually 80 (currently 85.something)
+    readonly float LevelWidth = 96;
     public List<LevelParser.LevelLine> LevelLines = new List<LevelParser.LevelLine>();
-    public List<GameObject> Prefabs = new List<GameObject>();
+    public List<string> LoadAssets;
     void Awake()
     {
         if (Level == null)
@@ -26,7 +26,7 @@ public class LevelEditor : MonoBehaviour
 
     void PopulateLevel()
     {
-        LevelLines = LevelParser.ParseFile(Level, out Prefabs);
+        LevelLines = LevelParser.ParseFile(Level, out LoadAssets);
         //load prefabs
         //run through each line, place in scene
         //update levelLength as we go
