@@ -20,14 +20,14 @@ public class LevelParser : MonoBehaviour
         public bool RelativePosition;
         public float Position;
         public AvailableCommands Command;
-        public LevelCommandArugment[] Arguments;
+        public LevelCommandArgument[] Arguments;
     }
     [System.Serializable]
     public class Command
     {
         //TODO: add bool
         //TODO: can we store variables as string, but just use the bits directly and treat them as whatever type we want? Is that worth the trouble?
-        public enum Types {None, Int, Float, String, Vector2, Vector3, Vector4}
+        public enum Types {None, Bool, Int, Float, String, Vector2, Vector3, Vector4, ERROR} //don't assign the ERROR case, that's for error handling internally
         public Types[] RequiredArgs;
         public Dictionary<string, Types> OptionalArgs;
         public Command(Types[] required, Dictionary<string, Types> optional)
@@ -41,11 +41,11 @@ public class LevelParser : MonoBehaviour
         }
     }
     [System.Serializable]
-    public class LevelCommandArugment
+    public class LevelCommandArgument
     {
         public string Argument;
         public string Value;
-        public LevelCommandArugment(string arg, string val)
+        public LevelCommandArgument(string arg, string val)
         {
             Argument = arg;
             Value = val;
@@ -67,12 +67,14 @@ public class LevelParser : MonoBehaviour
                 Command.Types.String,
                 Command.Types.Vector3 },
                 new Dictionary<string, Command.Types>{
-                    {"Animation", Command.Types.String },
-                    {"Path", Command.Types.String },
-                    {"DeathEvent",Command.Types.None },
-                    {"HealthDelay",Command.Types.Float },
-                    {"SendMessage",Command.Types.String },
-                    {"Group",Command.Types.String } })},
+                    {"Animation", Command.Types.String }, //animation file to play (generally don't use with Path)
+                    {"Path", Command.Types.String }, //path to follow (generally don't use with Animation)
+                    {"DeathEvent",Command.Types.None }, //tag this unit to count towards level hold counter on death //TO BE DEPRECATED ONCE GROUPS ARE IMPLEMENTED
+                    {"HealthDelay",Command.Types.Float }, //time until unit can receive damage
+                    {"Group",Command.Types.String }, //NOT IMPLEMENTED YET: add unit to a named group, for use with events and triggers (EG end level hold when group is empty)
+                    {"SendMessage",Command.Types.String }, //Bad, find another way to do this.
+                    {"Multiple", Command.Types.Vector2 },
+                    {"Several", Command.Types.Vector2 } })}, //spawn several identical copies of this unit in a row- Vector2 entries are number of units, and delay between spawns
         
         {AvailableCommands.DisplayText,
             new Command(new Command.Types[]{
@@ -95,8 +97,8 @@ public class LevelParser : MonoBehaviour
                 Command.Types.String },
                 new Dictionary<string, Command.Types>{
                     {"Crossfade", Command.Types.Float},
-                    {"Intro",Command.Types.String },
-                    {"Lerp",Command.Types.Float } })},
+                    {"Lerp",Command.Types.Float },
+                    {"Intro",Command.Types.String } })},
         
         //TODO: DefineVariable
         
@@ -223,7 +225,7 @@ public class LevelParser : MonoBehaviour
         return null;
         line_command_found:
 
-        List<LevelCommandArugment> TempArgs = new List<LevelCommandArugment>();
+        List<LevelCommandArgument> TempArgs = new List<LevelCommandArgument>();
         //outputLine.Arguments = new LevelCommandArugment[RemainingLine.Split(charWhitespace).Length - 1];
         int argIndex = 0;
         string ArgName;
@@ -259,7 +261,7 @@ public class LevelParser : MonoBehaviour
                     OutputString += CurrentChunk + " ";
                     GetNextChunk();
                 }
-                TempArgs.Add(new LevelCommandArugment(OutputString, null));
+                TempArgs.Add(new LevelCommandArgument(OutputString, null));
             }
         }
         if (currentCommand.RequiredArgs != null)
@@ -271,7 +273,7 @@ public class LevelParser : MonoBehaviour
                 {
                     return null;
                 }
-                TempArgs.Add(new LevelCommandArugment(argIndex.ToString(), CurrentChunk));
+                TempArgs.Add(new LevelCommandArgument(argIndex.ToString(), CurrentChunk));
                 argIndex++;
             }
         }
@@ -309,7 +311,7 @@ public class LevelParser : MonoBehaviour
                             else
                             {
                                 //no error found
-                                TempArgs.Add(new LevelCommandArugment(ArgName, ArgValue));
+                                TempArgs.Add(new LevelCommandArgument(ArgName, ArgValue));
                             }
                         }
                     }
@@ -327,7 +329,7 @@ public class LevelParser : MonoBehaviour
                 else
                 {
                     //no error found, current chunk is a standalone argument (type None)
-                    TempArgs.Add(new LevelCommandArugment(CurrentChunk, null));
+                    TempArgs.Add(new LevelCommandArgument(CurrentChunk, null));
                     //outputLine.Arguments[argIndex] = new LevelCommandArugment(CurrentChunk, null);
                 }
                 argIndex++;
@@ -336,7 +338,48 @@ public class LevelParser : MonoBehaviour
 
         //TODO: test for duplicate instances of optional arguments (or just don't bother, it's probably fine)
 
+        //error checking: (maybe I'm only checking for errors in LevelMode, I could probably lose the switch statement)
+        switch (outputLine.Command)
+        {
+            case AvailableCommands.LevelMode:
+                string mode = TempArgs[0].Value;
+                if ( mode != "Distance" && mode != "Time")
+                {
+                    Debug.LogError($"Invalid scrolling mode: {mode} (line{LineNumber})");
+                    return null;
+                }
+                break;
+            case AvailableCommands.Spawn:
+                foreach(LevelCommandArgument arg in outputLine.Arguments)
+                {
+                    if (arg.Argument == "SendMessage")
+                    {
+                        string[] components = arg.Value.Split(charComma);
+                        Command.Types argType = components[1] switch
+                        {
+                            "null" => Command.Types.None,
+                            "bool" => Command.Types.Bool,
+                            "int" => Command.Types.Int,
+                            "float" => Command.Types.Float,
+                            "string" => Command.Types.String,
+                            _ => Command.Types.ERROR
+                        };
+                        if (argType == Command.Types.ERROR)
+                        {
+                            Debug.LogError($"Invalid type for SendMessage: {components[1]} (Line {LineNumber})");
+                        }
+                        else if (argType != Command.Types.None)
+                        {
+                            TestParseArgument(components[2], argType);
+                        }
+                    }
+                }
+                break;
+        }
+
         outputLine.Arguments = TempArgs.ToArray();
+
+        //check if we need to add assets to load
         switch (outputLine.Command)
         {
             case AvailableCommands.Spawn:
@@ -457,6 +500,21 @@ public class LevelParser : MonoBehaviour
                 return true;
             }
         }
+    }
+    public static Vector2 ParseVector2(string str)
+    {
+        string[] components = str.Split(',');
+        return new Vector2(float.Parse(components[0]), float.Parse(components[1]));
+    }
+    public static Vector3 ParseVector3(string str)
+    {
+        string[] components = str.Split(',');
+        return new Vector3(float.Parse(components[0]), float.Parse(components[1]), float.Parse(components[2]));
+    }
+    public static Vector4 ParseVector4(string str)
+    {
+        string[] components = str.Split(',');
+        return new Vector4(float.Parse(components[0]), float.Parse(components[1]), float.Parse(components[2]), float.Parse(components[3]));
     }
 
 }

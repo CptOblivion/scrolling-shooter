@@ -8,6 +8,12 @@ using UnityEngine.Audio;
 [RequireComponent(typeof(Camera))]
 public class LevelController : MonoBehaviour
 {
+
+    class RepeatUnit
+    {
+
+    }
+
     //
     //dumb debug stuff, remove before proper build
     //
@@ -41,6 +47,7 @@ public class LevelController : MonoBehaviour
 
     public AudioMixer audioMixer;
     AudioSource[] musicSources;
+
     //we'll be using currentMusicSource as an int but it's convenient to be able to do !currentMusicSource to get the other one
     //read from musicSources with musicSources[currentMusicSource?1:0] (or 0:1 for the not-current music source)
     bool currentMusicSource = true;
@@ -86,15 +93,12 @@ public class LevelController : MonoBehaviour
     [HideInInspector]
     public float PlayerWidth;
 
-    readonly char[] charSpace = new char[] { ' ', '\t' };
-    readonly char[] charEquals = new char[] { '=' };
-    readonly char[] charComma = new char[] { ',' };
-
     Camera cam;
 
     List<LevelParser.LevelLine> levelParsed;
-
     int LevelCommandIndex = 0;
+
+    readonly List<RepeatUnit> RepeatUnits = new List<RepeatUnit>();
 
     private void Awake()
     {
@@ -178,7 +182,7 @@ public class LevelController : MonoBehaviour
             {
                 loading = false;
 
-                string debugString = "Loaded\n";
+                string debugString = "Loaded Assets: \n";
                 foreach(string name in LoadAssets.Keys)
                 {
                     debugString += name + "\n";
@@ -194,7 +198,7 @@ public class LevelController : MonoBehaviour
             }
         }
 
-        if(!loading)
+        if(!loading) //mot using "else" because we don't want to wait for the next frame if loading just finished
         {
             playerCollider = Player.gameObject.GetComponent<CompositeCollider2D>();
             PlayerWidth = playerCollider.bounds.extents.x;
@@ -210,7 +214,8 @@ public class LevelController : MonoBehaviour
             {
 
                 //time to loop through the parsed level until we hit a command we haven't reached yet
-                while (true) //risky!
+                bool ExitLoop = false;
+                while (!ExitLoop) //risky!
                 {
                     float NextCommandDistance;
                     float LevelProgress;
@@ -236,295 +241,227 @@ public class LevelController : MonoBehaviour
                     LevelTimeRelative = 0;
                     LevelParser.LevelLine line = levelParsed[LevelCommandIndex]; //the current line we're working on
 
+                    int CurrentArg = 0;
+                    string arg = "";
+                    string val = "";
+
                     switch (line.Command)
                     {
                         case LevelParser.AvailableCommands.LevelMode:
-                            if (line.Arguments[0].Value == "Distance") LevelScrollModeTime = false;
-                            else if (line.Arguments[0].Value == "Time") LevelScrollModeTime = true;
+                            GetNextArgument();
+                            if (val == "Distance") LevelScrollModeTime = false;
+                            else if (val == "Time") LevelScrollModeTime = true;
                             break;
                         case LevelParser.AvailableCommands.ScrollSpeed:
+                            GetNextArgument();
+                            float OldScrollSpeed = ScrollSpeed; //store in case we want to lerp from this value
+                            ScrollSpeed = float.Parse(val);
+                            while (GetNextArgument())
+                            {
+                                switch (arg)
+                                {
+                                    case "Lerp":
+                                        ScrollSpeedLerpStart = OldScrollSpeed;
+                                        ScrollSpeedLerpSpeed = 1 / float.Parse(val);
+                                        ScrollSpeedLerpTarget = ScrollSpeed;
+                                        ScrollSpeed = OldScrollSpeed;
+                                        break;
+                                }
+                            }
                             break;
                         case LevelParser.AvailableCommands.Spawn:
+                            GetNextArgument();
+                            string prefabPath = $"Prefabs/{val}";
+                            ResourceRequest prefabResource = LoadAssets[prefabPath];
+                            GetNextArgument();
+                            Vector3 SpawnPosition = LevelParser.ParseVector3(val);
+                            GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
+                            while (GetNextArgument()) //optional arguments
+                            {
+                                switch (arg)
+                                {
+                                    case "Animation":
+                                        GameObject animParent = new GameObject(spawnedObject.name);
+                                        animParent.transform.position = spawnedObject.transform.position;
+                                        spawnedObject.transform.SetParent(animParent.transform);
+
+                                        Animation anim = spawnedObject.GetComponent<Animation>();
+                                        string animPath = $"Animations/{val}";
+                                        AnimationClip animClip = LoadAssets[animPath].asset as AnimationClip;
+                                        anim.clip = animClip;
+                                        anim.AddClip(animClip, animClip.name);
+                                        anim.Play(animClip.name);
+                                        break;
+                                    case "DeathEvent":
+                                        spawnedObject.AddComponent<DecrementHoldOnDeath>();
+                                        break;
+                                    case "HealthDelay":
+                                        spawnedObject.SendMessage("SetHealthDelay", float.Parse(val)); //TODO: directly call this by referencing the base class for anything that has health
+                                        break;
+                                    case "SendMessage": //TODO: there's gotta be a better way to call functions without using SendMessage
+                                        string[] subArguments = val.Split(LevelParser.charComma);
+                                        switch (subArguments[1])
+                                        {
+                                            case "bool":
+                                                spawnedObject.SendMessage(subArguments[0], bool.Parse(subArguments[2]));
+                                                break;
+                                            case "int":
+                                                spawnedObject.SendMessage(subArguments[0], int.Parse(subArguments[2]));
+                                                break;
+                                            case "float":
+                                                spawnedObject.SendMessage(subArguments[0], float.Parse(subArguments[2]));
+                                                break;
+                                            case "string":
+                                                spawnedObject.SendMessage(subArguments[0], subArguments[2]);
+                                                break;
+                                        }
+                                        break;
+                                    case "Multiple":
+                                    case "Several":
+                                        //TODO: implement this
+                                        //list already exists, add to it
+                                        break;
+                                }
+                            }
                             break;
                         case LevelParser.AvailableCommands.DisplayText:
+                            GetNextArgument();
+                            GameObject textOb = Instantiate(Resources.Load("GenericText", typeof(GameObject)) as GameObject); //TODO: store a Text object in a public variable so Unity loads it automatically
+                            textOb.transform.SetParent(hudCanvas.transform, false);
+                            Text textComponent = textOb.GetComponent<Text>();
+                            textComponent.text = arg; //storing text value in arg instead of val just for inspector readability, probably a bad idea
+                            GetNextArgument();
+                            float TextLife = float.Parse(val);
+                            textOb.GetComponent<EffectKill>().life = TextLife; //do we need this component? Can't we call Destroy with a time? (check if the component does more than just destroy)
+                            while (GetNextArgument())
+                            {
+                                switch (arg)
+                                {
+                                    case "Position":
+                                        textOb.transform.localPosition = LevelParser.ParseVector3(val);
+                                        break;
+                                    case "Size":
+                                        textComponent.fontSize = int.Parse(val);
+                                        break;
+                                    case "Color":
+                                        textComponent.color = LevelParser.ParseVector4(val);
+                                        break;
+                                }
+                            }
                             break;
                         case LevelParser.AvailableCommands.PlaySound:
+                            float pitch = 1;
+                            float volume = 1;
+                            float spatialBlend = 0;
+                            Vector3 Position = Vector3.zero;
+                            GetNextArgument();
+                            AudioClip sound = LoadAssets[$"Sounds/{val}"].asset as AudioClip;
+                            while (GetNextArgument())
+                            {
+                                switch (arg)
+                                {
+                                    case "Volume":
+                                        volume = float.Parse(val);
+                                        break;
+                                    case "Position":
+                                        Position = LevelParser.ParseVector3(val);
+                                        break;
+                                    case "Pitch":
+                                        pitch = float.Parse(val);
+                                        break;
+                                }
+                            }
+                            AudioSource audioSource = GlobalTools.PlaySound(sound, pitch);
+                            audioSource.volume = volume;
+                            audioSource.spatialBlend = spatialBlend;
+                            audioSource.gameObject.transform.position = Position;
                             break;
                         case LevelParser.AvailableCommands.PlayMusic:
+                            GetNextArgument();
+                            AudioClip music = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+                            currentMusicSource = !currentMusicSource;
+
+                            //this whole chunk should probably go into a function
+                            musicSources[currentMusicSource ? 0 : 1].clip = music;
+                            musicSources[currentMusicSource ? 0 : 1].Play();
+                            musicSources[currentMusicSource ? 0 : 1].volume = 1;
+                            musicSources[currentMusicSource ? 1 : 0].volume = 0;
+                            while (GetNextArgument())
+                            {
+                                switch (arg)
+                                {
+                                    case "Crossfade":
+                                    case "Lerp":
+                                        musicLerpProgress = 1;
+                                        musicLerpSpeed = 1 / float.Parse(val);
+                                        break;
+                                    case "Intro":
+                                        AudioClip introMusic = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+
+                                        //the whole following chunk should probably go into a function
+                                        musicSources[currentMusicSource ? 1 : 0].clip = introMusic; 
+                                        musicSources[currentMusicSource ? 1 : 0].Play();
+                                        musicSources[currentMusicSource ? 1 : 0].volume = 1;
+                                        musicSources[currentMusicSource ? 1 : 0].loop = false;
+                                        musicSources[currentMusicSource ? 0 : 1].Stop();
+                                        musicSources[currentMusicSource ? 0 : 1].PlayScheduled(AudioSettings.dspTime + introMusic.length);
+                                        break;
+                                }
+                            }
+
                             break;
                         case LevelParser.AvailableCommands.HoldForDeath:
+                            bool additive = false;
+                            int count = 1;
+                            while (GetNextArgument())
+                            {
+                                switch (arg)
+                                {
+                                    case "Count":
+                                        count = int.Parse(val);
+                                        break;
+                                    case "Additive":
+                                        additive = true;
+                                        break;
+                                }
+                            }
+                            if (additive) LevelHolding += count;
+                            else LevelHolding = count;
+                            if (LevelHolding > 0) //if we're actually holding
+                            {
+                                ExitLoop = true;
+                            }
                             break;
                         case LevelParser.AvailableCommands.VictoryAnim:
+                            playerControl.PlayVictoryAnimation();
                             break;
                         case LevelParser.AvailableCommands.LevelEnd:
+                            Debug.Log("Level finished");
+                            GlobalTools.EndLevel(false);
+                            ExitLoop = true;
                             break;
-                    }
 
-                    //TODO: transcribe the long-ass if/else/else below into the switch above
-                    //  move error checking over into LevelParser.ParseLine
-
-                    if (command == "LevelMode")
-                    {
-                        if (arguments.Length == 0) Debug.Log("no mode selected, line " + LevelFileLine);
-                        else if (arguments[0] == "Distance") LevelScrollModeTime = false;
-                        else if (arguments[0] == "Time") LevelScrollModeTime = true;
-                        else Debug.Log("Invalid scrolling mode: " + arguments[0] + ", line " + LevelFileLine);
-                    }
-
-
-                    else if (command == "ScrollSpeed")
-                    {
-                        for (int i = 1; i < arguments.Length; i++)
-                        {
-                            string[] argument = arguments[i].Split(charEquals);
-                            if (argument[0] == "Lerp")
+                            bool GetNextArgument()
                             {
-                                ScrollSpeedLerpStart = ScrollSpeed;
-                                ScrollSpeedLerpSpeed = 1 / float.Parse(argument[1]);
-                                ScrollSpeedLerpTarget = float.Parse(arguments[0]);
-                                ScrollSpeedLerpProgress = 0;
-                            }
-                            else Debug.Log("Invalid argument: " + argument[0] + ", line " + LevelFileLine);
-                        }
-                        ScrollSpeed = float.Parse(arguments[0]);
-                    }
-
-
-                    else if (command == "Spawn") //Spawn prefabPath x,y,z
-                    {
-                        string prefabPath = "Prefabs/" + arguments[0];
-                        ResourceRequest prefabResource = LoadAssets[prefabPath];
-
-                        string[] positionStrings = arguments[1].Split(charComma);
-                        Vector3 spawnPosition = Vector3.zero;
-                        for (int i = 0; i < 3; i++) spawnPosition[i] = float.Parse(positionStrings[i]);
-                        GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, spawnPosition, Quaternion.identity);
-
-                        for (int i = 2; i < arguments.Length; i++) //optional arguments
-                        {
-                            string[] argument = arguments[i].Split(charEquals);
-                            if (argument[0] == "Animation") //Animation=animationClipPath
-                            {
-                                GameObject animParent = new GameObject(spawnedObject.name);
-                                animParent.transform.position = spawnedObject.transform.position;
-                                spawnedObject.transform.SetParent(animParent.transform);
-
-                                Animation anim = spawnedObject.GetComponent<Animation>();
-                                string animPath = "Animations/" + argument[1];
-                                AnimationClip animClip = LoadAssets[animPath].asset as AnimationClip;
-                                anim.clip = animClip;
-                                anim.AddClip(animClip, animClip.name);
-                                anim.Play(animClip.name);
-
-                            }
-                            else if (argument[0] == "DeathEvent") //DeathEvent
-                            {
-                                spawnedObject.AddComponent<DecrementHoldOnDeath>();
-                            }
-                            else if (argument[0] == "HealthDelay") //HealthDelay=delay
-                            {
-                                spawnedObject.SendMessage("SetHealthDelay", float.Parse(argument[1]));
-                            }
-                            else if (argument[0] == "SendMessage") //SendMessage=message,valueType,value
-                            {
-                                string[] subArguments = argument[1].Split(charComma);
-                                if (subArguments[1] == "bool") spawnedObject.SendMessage(subArguments[0], bool.Parse(subArguments[2]));
-                                else if (subArguments[1] == "int") spawnedObject.SendMessage(subArguments[0], int.Parse(subArguments[2]));
-                                else if (subArguments[1] == "float") spawnedObject.SendMessage(subArguments[0], float.Parse(subArguments[2]));
-                                else if (subArguments[1] == "string") spawnedObject.SendMessage(subArguments[0], subArguments[2]);
-                                else
+                                if (CurrentArg < line.Arguments.Length)
                                 {
-                                    Debug.Log("invalid type: " + subArguments[1] + " line " + LevelFileLine);
+                                    arg = line.Arguments[CurrentArg].Argument;
+                                    val = line.Arguments[CurrentArg].Value;
+                                    CurrentArg++;
+                                        return true;
                                 }
-
+                                return false;
                             }
-                            else Debug.Log("Invalid argument: " + argument[0] + ", line " + LevelFileLine);
-                        }
                     }
-
-
-                    else if (command == "DisplayText")
-                    {
-                        string displayText = "";
-
-                        //this whole mess is to allow spaces in the DisplayText string
-                        //each word is stored as a separate argument so we have to rebuild the string and then treat everything after as subsequent arguments
-                        //I'm tempted to get rid of all this and just require a \s for spaces or something, but I've already gone and written the code so eh
-                        int index = 0;
-                        bool wordsFinished = false;
-                        for (; index < arguments.Length; index++)
-                        {
-                            string currentWord = arguments[index];
-                            if (index == 0) currentWord = currentWord.Remove(0, 1);//lose that opening quotation mark
-
-                            if (currentWord.Substring(currentWord.Length - 1) == "\"")// once we run into a close quote, we're done
-                            {
-                                currentWord = currentWord.Remove(currentWord.Length - 1); //trim the final quotation mark
-                                wordsFinished = true;
-                            }
-
-                            displayText += currentWord;
-
-                            if (wordsFinished)
-                            {
-                                index++; //we're gonna continue using index after this but it's not automatically incremented by the loop if we break
-                                break; //whoops we did it we broke oh jeez oh gosh
-                            }
-                            displayText += " "; //add a space after each word (except the last one)
-                        }
-
-                        GameObject textObject = Instantiate(Resources.Load("GenericText", typeof(GameObject)) as GameObject);
-                        textObject.transform.SetParent(hudCanvas.transform, false);
-                        Text textComponent = textObject.GetComponent<Text>();
-                        textComponent.text = displayText;
-                        float TextLife = float.Parse(arguments[index]); index++;
-                        textObject.GetComponent<EffectKill>().life = TextLife;
-
-                        for (int i1 = index; i1 < arguments.Length; i1++) //and now the optional arguments 
-                        {
-                            string[] argument = arguments[i1].Split(charEquals);
-
-                            if (argument[0] == "Position") //floats x,y,z
-                            {
-                                string[] PositionStrings = argument[1].Split(charComma);
-                                Vector3 TextPosition = Vector3.zero;
-                                for (int i = 0; i < 3; i++) TextPosition[i] = float.Parse(PositionStrings[i]);
-                                textObject.transform.localPosition = TextPosition;
-                            }
-                            else if (argument[0] == "Size") // float size
-                            {
-                                float TextSize = float.Parse(argument[1]);
-                                textComponent.fontSize = (int)TextSize;
-
-                            }
-                            else if (argument[0] == "Color") //floats r,g,b,a
-                            {
-                                string[] colorStrings = argument[1].Split(charComma);
-                                Color textColor = Color.black;
-                                for (int i = 0; i < 4; i++) textColor[i] = float.Parse(colorStrings[i]);
-                                textComponent.color = textColor;
-                            }
-                            else Debug.Log("Invalid argument: " + argument[0] + ", line " + LevelFileLine);
-                        }
-
-                    }
-
-                    else if (command == "PlaySound")
-                    {
-                        int i = 0;
-                        float pitch = 1;
-                        float volume = 1;
-                        float spatialBlend = 0;
-                        Vector3 Position = Vector3.zero;
-                        AudioClip sound = LoadAssets["Sounds/" + arguments[0]].asset as AudioClip; i++;
-
-                        for (; i < arguments.Length; i++)
-                        {
-                            string[] argument = arguments[i].Split(charEquals);
-
-                            if (argument[0] == "Volume")
-                            {
-                                volume = float.Parse(argument[1]);
-                            }
-                            else if (argument[0] == "Position")
-                            {
-                                string[] PositionStrings = argument[1].Split(charComma);
-                                for (int i2 = 0; i2 < 3; i2++) Position[i] = float.Parse(PositionStrings[i2]);
-                                spatialBlend = 1;
-                            }
-                            else if (argument[0] == "Pitch")
-                            {
-                                pitch = float.Parse(argument[1]);
-                            }
-                            else Debug.Log("Invalid argument: " + argument[0] + ", line " + LevelFileLine);
-                        }
-                        AudioSource audioSource = GlobalTools.PlaySound(sound, pitch);
-                        audioSource.volume = volume;
-                        audioSource.spatialBlend = spatialBlend;
-                        audioSource.gameObject.transform.position = Position;
-                    }
-
-                    else if (command == "PlayMusic")
-                    {
-                        int i = 0;
-                        AudioClip music = Resources.Load("Sounds/Music/"+arguments[0]) as AudioClip; i++;
-                        currentMusicSource = !currentMusicSource;
-
-                        musicSources[currentMusicSource ? 0 : 1].clip = music;
-                        musicSources[currentMusicSource ? 0 : 1].Play();
-                        musicSources[currentMusicSource ? 0 : 1].volume = 1;
-                        musicSources[currentMusicSource ? 1 : 0].volume = 0;
-
-                        for (; i < arguments.Length; i++)
-                        {
-                            string[] argument = arguments[i].Split(charEquals);
-
-                            if (argument[0] == "Crossfade" || argument[0]== "Lerp")//why not be flexible, eh?
-                            {
-                                musicLerpProgress = 1;
-                                musicLerpSpeed = 1 / float.Parse(argument[1]);
-                            }
-                            else if (argument[0] == "Intro")
-                            {
-                                AudioClip introMusic = Resources.Load("Sounds/Music/" + argument[1]) as AudioClip;
-                                musicSources[currentMusicSource ? 1:0].clip = introMusic;
-                                musicSources[currentMusicSource ? 1:0].Play();
-                                musicSources[currentMusicSource ? 1 : 0].volume = 1;
-                                musicSources[currentMusicSource ? 1 : 0].loop = false;
-                                musicSources[currentMusicSource ? 0 : 1].Stop();
-                                musicSources[currentMusicSource ? 0 : 1].PlayScheduled(AudioSettings.dspTime + introMusic.length);
-                            }
-                        }
-                    }
-
-                    else if (command == "HoldForDeath") //HoldForEvent
-                    {
-                        bool additive = false;
-                        int count = 1;
-                        for (int i = 0; i < arguments.Length; i++) //optional arguments
-                        {
-                            string[] argument = arguments[i].Split(charEquals);
-                            if (argument[0] == "Count") //Count=count
-                            {
-                                count = int.Parse(argument[1]);
-                            }
-                            else if (argument[0] == "Additive") //Additive
-                            {
-                                additive = true;
-                            }
-                        }
-                        if (additive) LevelHolding += count;
-                        else LevelHolding = count;
-                        if (LevelHolding > 0) //if we're actually holding
-                        {
-                            levelParsed.RemoveAt(0);
-                            break;
-                        }
-                    }
-
-
-                    else if (command == "VictoryAnim")
-                    {
-                        playerControl.PlayVictoryAnimation();
-                    }
-
-
-                    else if (command == "LevelEnd")
-                    {
-                        GlobalTools.EndLevel(false);
-                        break;//this is probably not necessary but it makes me feel safer
-                    }
-                    else Debug.Log("invalid command: " + command + ", line " + LevelFileLine);
-
-                    levelParsed.RemoveAt(0);//pop the line we just finished
+                    LevelCommandIndex++;
 
                     //cleanup just in case a level is left open at the end
                     //this means the player will never see whatever the last command was, of course, since the level ends on the next frame
-                    if (levelParsed.Count == 0)
+                    if (!ExitLoop && LevelCommandIndex == levelParsed.Count)
                     {
                         Debug.Log("no LevelEnd in level file! Ending...");
-                        levelParsed.Add(new string[] { "+0", "LevelEnd" });
-                        break;
+                        levelParsed.Add(new LevelParser.LevelLine {RelativePosition=true,Position=0,  Command=LevelParser.AvailableCommands.LevelEnd });
+                        ExitLoop = true;
                     }
                 }
 
@@ -536,10 +473,15 @@ public class LevelController : MonoBehaviour
 
                 if (musicLerpProgress > 0)
                 {
+                    musicLerpProgress -= musicLerpSpeed * Time.deltaTime;
                     musicSources[currentMusicSource ? 1 : 0].volume = musicLerpProgress; //old music, ramping down
                     musicSources[currentMusicSource ? 0 : 1].volume = 1 - musicLerpProgress; //new music, ramping up
-                    musicLerpProgress -= musicLerpSpeed * Time.deltaTime;
                 }
+
+                //TODO: add enemy multiples spawning
+                //  count down all timers
+                //  spawn and decrement counters
+
             }
 
 
@@ -569,7 +511,7 @@ public class LevelController : MonoBehaviour
         transform.position = GlobalTools.PixelSnap(new Vector3(scrollX, 0, transform.position.z)); //set the position, snapped to pixel
 
     }
-    public void HoldDecrement() //this function is to allow us to resume if the level file is waiting for enemies to die or whatnot
+    public void HoldDecrement()
     {
         LevelHolding -= 1;
     }
