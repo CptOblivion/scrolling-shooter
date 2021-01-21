@@ -89,9 +89,9 @@ public class LevelController : MonoBehaviour
     [HideInInspector]
     public float PlayerWidth;
 
-    char[] charSpace = new char[] { ' ', '\t' };
-    char[] charEquals = new char[] { '=' };
-    char[] charComma = new char[] { ',' };
+    readonly char[] charSpace = new char[] { ' ', '\t' };
+    readonly char[] charEquals = new char[] { '=' };
+    readonly char[] charComma = new char[] { ',' };
 
 
     private void Awake()

@@ -9,41 +9,33 @@ public class LevelEditor : MonoBehaviour
     int ActiveCommand;
     int[] SelectedCommands;
     readonly float ScreenHeight = 48;
-    readonly float LevelWidth = 48 * (16 / 9);
-    readonly List<string> LevelLines = new List<string>();
-    readonly List<GameObject> Prefabs = new List<GameObject>();
+    readonly float LevelWidth = 48 * (16 / 9); //TODO: check if this is actually 80 (currently 85.something)
+    public List<LevelParser.LevelLine> LevelLines = new List<LevelParser.LevelLine>();
+    public List<GameObject> Prefabs = new List<GameObject>();
     void Awake()
     {
-        if (Level != null)
-        {
-            PopulateLevel();
-        }
-        else
+        if (Level == null)
         {
             SelectLevel();
         }
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+        else
+        {
+            PopulateLevel();
+        }
     }
 
     void PopulateLevel()
     {
-        LevelParser.ParseLine("2.5 ScrollSpeed 5 12 poop");
-        //TODO: this
-        //read file header
-        //populate prefabs, load them
-        //parse the rest of the file into separate strings for lines
+        LevelLines = LevelParser.ParseFile(Level, out Prefabs);
+        //load prefabs
         //run through each line, place in scene
-        //update levelLength
+        //update levelLength as we go
     }
 
     void SelectLevel()
     {
         //TODO: popup to select existing file or create new
     }
+
 
 }
