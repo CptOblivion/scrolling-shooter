@@ -73,8 +73,9 @@ public class LevelParser : MonoBehaviour
                     {"HealthDelay",Command.Types.Float }, //time until unit can receive damage
                     {"Group",Command.Types.String }, //NOT IMPLEMENTED YET: add unit to a named group, for use with events and triggers (EG end level hold when group is empty)
                     {"SendMessage",Command.Types.String }, //Bad, find another way to do this.
-                    {"Multiple", Command.Types.Vector2 },
-                    {"Several", Command.Types.Vector2 } })}, //spawn several identical copies of this unit in a row- Vector2 entries are number of units, and delay between spawns
+                    {"Multiple", Command.Types.Vector3 },
+                    {"Repeat", Command.Types.Vector3 },
+                    {"Several", Command.Types.Vector3 } })}, //spawn several identical copies of this unit in a row- Vector2 entries are number of units, and delay between spawns
         
         {AvailableCommands.DisplayText,
             new Command(new Command.Types[]{
@@ -101,6 +102,7 @@ public class LevelParser : MonoBehaviour
                     {"Intro",Command.Types.String } })},
         
         //TODO: DefineVariable
+        //TODO: figure out if there's actually a use for DefineVariable
         
         {AvailableCommands.HoldForDeath,
             new Command(
@@ -350,7 +352,7 @@ public class LevelParser : MonoBehaviour
                 }
                 break;
             case AvailableCommands.Spawn:
-                foreach(LevelCommandArgument arg in outputLine.Arguments)
+                foreach(LevelCommandArgument arg in TempArgs)
                 {
                     if (arg.Argument == "SendMessage")
                     {

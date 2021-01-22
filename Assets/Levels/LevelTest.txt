@@ -35,8 +35,9 @@
 //start spawning enemies
 2 Spawn		Enemies/Enemy_Shooter	0,8,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
 +1 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
-+6.5 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericR
-+.05 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
+
++6.5 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericR Multiple=3,.8,2
++.05 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericL Multiple=3,.95,-2
 
 +6.5 DisplayText "BOSS" 3 Position=0,15,0 Color=1,0,0,1
 +0 DisplayText "INCOMING!!!!" 3 Position=0,5,0 Color=1,0,0,1

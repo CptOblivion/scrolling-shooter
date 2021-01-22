@@ -11,14 +11,27 @@ public class LevelController : MonoBehaviour
 
     class RepeatUnit
     {
-
+        public LevelParser.LevelLine Line;
+        public int UnitsRemaining;
+        public float Delay;
+        public float DelayTimer;
+        public float Offset;
+        public float CurrentOffset;
+        public RepeatUnit (int count, float delay, float offset, LevelParser.LevelLine line)
+        {
+            Line = line;
+            UnitsRemaining = count;
+            Delay = DelayTimer = delay;
+            Offset = offset;
+            CurrentOffset = 0;
+        }
     }
 
     //
     //dumb debug stuff, remove before proper build
-    //
-
     public float simulateLoading = 0;
+    //
+    //
 
 
     [HideInInspector]
@@ -134,6 +147,9 @@ public class LevelController : MonoBehaviour
     {
         //CloseSettings();
         //Unpause();
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
 
         displayCanvas.gameObject.SetActive(true);
         loadingCanvas.gameObject.SetActive(true);
@@ -270,59 +286,16 @@ public class LevelController : MonoBehaviour
                             }
                             break;
                         case LevelParser.AvailableCommands.Spawn:
-                            GetNextArgument();
-                            string prefabPath = $"Prefabs/{val}";
-                            ResourceRequest prefabResource = LoadAssets[prefabPath];
-                            GetNextArgument();
-                            Vector3 SpawnPosition = LevelParser.ParseVector3(val);
-                            GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
-                            while (GetNextArgument()) //optional arguments
+                            foreach(LevelParser.LevelCommandArgument argument in line.Arguments)
                             {
-                                switch (arg)
+                                if (argument.Argument == "Multiple" || argument.Argument == "Several" || argument.Argument == "Repeat")
                                 {
-                                    case "Animation":
-                                        GameObject animParent = new GameObject(spawnedObject.name);
-                                        animParent.transform.position = spawnedObject.transform.position;
-                                        spawnedObject.transform.SetParent(animParent.transform);
-
-                                        Animation anim = spawnedObject.GetComponent<Animation>();
-                                        string animPath = $"Animations/{val}";
-                                        AnimationClip animClip = LoadAssets[animPath].asset as AnimationClip;
-                                        anim.clip = animClip;
-                                        anim.AddClip(animClip, animClip.name);
-                                        anim.Play(animClip.name);
-                                        break;
-                                    case "DeathEvent":
-                                        spawnedObject.AddComponent<DecrementHoldOnDeath>();
-                                        break;
-                                    case "HealthDelay":
-                                        spawnedObject.SendMessage("SetHealthDelay", float.Parse(val)); //TODO: directly call this by referencing the base class for anything that has health
-                                        break;
-                                    case "SendMessage": //TODO: there's gotta be a better way to call functions without using SendMessage
-                                        string[] subArguments = val.Split(LevelParser.charComma);
-                                        switch (subArguments[1])
-                                        {
-                                            case "bool":
-                                                spawnedObject.SendMessage(subArguments[0], bool.Parse(subArguments[2]));
-                                                break;
-                                            case "int":
-                                                spawnedObject.SendMessage(subArguments[0], int.Parse(subArguments[2]));
-                                                break;
-                                            case "float":
-                                                spawnedObject.SendMessage(subArguments[0], float.Parse(subArguments[2]));
-                                                break;
-                                            case "string":
-                                                spawnedObject.SendMessage(subArguments[0], subArguments[2]);
-                                                break;
-                                        }
-                                        break;
-                                    case "Multiple":
-                                    case "Several":
-                                        //TODO: implement this
-                                        //list already exists, add to it
-                                        break;
+                                    Vector3 vec = LevelParser.ParseVector3(argument.Value);
+                                    RepeatUnits.Add(new RepeatUnit((int)vec[0], vec[1], vec[2], line));
+                                    break;
                                 }
                             }
+                            SpawnObject(line);
                             break;
                         case LevelParser.AvailableCommands.DisplayText:
                             GetNextArgument();
@@ -478,9 +451,22 @@ public class LevelController : MonoBehaviour
                     musicSources[currentMusicSource ? 0 : 1].volume = 1 - musicLerpProgress; //new music, ramping up
                 }
 
-                //TODO: add enemy multiples spawning
-                //  count down all timers
-                //  spawn and decrement counters
+                for(int i = 0; i < RepeatUnits.Count; i++)
+                {
+                    RepeatUnits[i].DelayTimer -= Time.deltaTime;
+                    if (RepeatUnits[i].DelayTimer <= 0)
+                    {
+                        RepeatUnits[i].CurrentOffset += RepeatUnits[i].Offset;
+                        SpawnObject(RepeatUnits[i].Line, RepeatUnits[i].CurrentOffset);
+                        RepeatUnits[i].UnitsRemaining--;
+                        RepeatUnits[i].DelayTimer = RepeatUnits[i].Delay;
+                        if (RepeatUnits[i].UnitsRemaining == 1)
+                        {
+                            RepeatUnits.RemoveAt(i);
+                            i--;
+                        }
+                    }
+                }
 
             }
 
@@ -510,6 +496,79 @@ public class LevelController : MonoBehaviour
 
         transform.position = GlobalTools.PixelSnap(new Vector3(scrollX, 0, transform.position.z)); //set the position, snapped to pixel
 
+    }
+
+    //TODO: test spawning multiple objects
+    void SpawnObject(LevelParser.LevelLine line, float offset = 0)
+    {
+        int CurrentArg = 0;
+        string arg = "";
+        string val = "";
+        GetNextArgument();
+
+        string prefabPath = $"Prefabs/{val}";
+        ResourceRequest prefabResource = LoadAssets[prefabPath];
+        GetNextArgument();
+        Vector3 SpawnPosition = LevelParser.ParseVector3(val);
+        //TODO: allow for horizontal offset if the path enters from top or bottom of screen
+        Vector3 PositionOffset = new Vector3(0, offset, 0);
+        GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, SpawnPosition+PositionOffset, Quaternion.identity);
+        while (GetNextArgument()) //optional arguments
+        {
+            switch (arg)
+            {
+                case "Animation":
+                    GameObject animParent = new GameObject(spawnedObject.name);
+                    animParent.transform.position = spawnedObject.transform.position;
+                    spawnedObject.transform.SetParent(animParent.transform);
+
+                    Animation anim = spawnedObject.GetComponent<Animation>();
+                    string animPath = $"Animations/{val}";
+                    AnimationClip animClip = LoadAssets[animPath].asset as AnimationClip;
+                    anim.clip = animClip;
+                    anim.AddClip(animClip, animClip.name);
+                    anim.Play(animClip.name);
+                    break;
+                case "DeathEvent":
+                    spawnedObject.AddComponent<DecrementHoldOnDeath>();
+                    break;
+                case "HealthDelay":
+                    spawnedObject.SendMessage("SetHealthDelay", float.Parse(val)); //TODO: directly call this by referencing the base class for anything that has health
+                    break;
+                case "SendMessage": //TODO: there's gotta be a better way to call functions without using SendMessage
+                    string[] subArguments = val.Split(LevelParser.charComma);
+                    switch (subArguments[1])
+                    {
+                        case "bool":
+                            spawnedObject.SendMessage(subArguments[0], bool.Parse(subArguments[2]));
+                            break;
+                        case "int":
+                            spawnedObject.SendMessage(subArguments[0], int.Parse(subArguments[2]));
+                            break;
+                        case "float":
+                            spawnedObject.SendMessage(subArguments[0], float.Parse(subArguments[2]));
+                            break;
+                        case "string":
+                            spawnedObject.SendMessage(subArguments[0], subArguments[2]);
+                            break;
+                    }
+                    break;
+                case "Multiple":
+                case "Several":
+                    break;
+            }
+        }
+        bool GetNextArgument()
+        {
+            if (CurrentArg < line.Arguments.Length)
+            {
+                arg = line.Arguments[CurrentArg].Argument;
+                val = line.Arguments[CurrentArg].Value;
+                CurrentArg++;
+                return true;
+            }
+            return false;
+        }
     }
     public void HoldDecrement()
     {
