@@ -31,4 +31,11 @@ public class ParallaxScroll : MonoBehaviour
             }
         }
     }
+
+    //TODO: move position position update into here, with a version that doesn't rely on GlobalTools.ParallaxScroll
+    //so we can call it from the editor
+    public void UpdatePosition()
+    {
+
+    }
 }

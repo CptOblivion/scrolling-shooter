@@ -43,7 +43,6 @@ public class LevelController : MonoBehaviour
 
     public PlayerInput playerInput;
 
-    List<string> LoadAssetList;
     Dictionary<string,ResourceRequest> LoadAssets;
 
     [Tooltip("the Pause Canvas should be dropped in here, so we can enable it at runtime")]
@@ -147,6 +146,7 @@ public class LevelController : MonoBehaviour
     {
         //CloseSettings();
         //Unpause();
+        GlobalTools.Mode = GlobalTools.GameModes.Play;
         Cursor.lockState = CursorLockMode.None;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -170,11 +170,12 @@ public class LevelController : MonoBehaviour
 
         if (Level != null)
         {
-            levelParsed = LevelParser.ParseFile(Level, out LoadAssetList);
-        }
-        foreach(string assetPath in LoadAssetList)
-        {
-            LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));
+            List<string> PathsToLoad;
+            levelParsed = LevelParser.ParseFile(Level, out PathsToLoad);
+            foreach (string assetPath in PathsToLoad)
+            {
+                LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));
+            }
         }
     }
 
@@ -328,7 +329,8 @@ public class LevelController : MonoBehaviour
                             float spatialBlend = 0;
                             Vector3 Position = Vector3.zero;
                             GetNextArgument();
-                            AudioClip sound = LoadAssets[$"Sounds/{val}"].asset as AudioClip;
+                            //AudioClip sound = LoadAssets[$"Sounds/{val}"].asset as AudioClip;
+                            AudioClip sound = LoadAssets[val].asset as AudioClip;
                             while (GetNextArgument())
                             {
                                 switch (arg)
@@ -351,7 +353,8 @@ public class LevelController : MonoBehaviour
                             break;
                         case LevelParser.AvailableCommands.PlayMusic:
                             GetNextArgument();
-                            AudioClip music = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+                            //AudioClip music = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+                            AudioClip music = Resources.Load(val) as AudioClip;
                             currentMusicSource = !currentMusicSource;
 
                             //this whole chunk should probably go into a function
@@ -369,7 +372,8 @@ public class LevelController : MonoBehaviour
                                         musicLerpSpeed = 1 / float.Parse(val);
                                         break;
                                     case "Intro":
-                                        AudioClip introMusic = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+                                        //AudioClip introMusic = Resources.Load($"Sounds/Music/{val}") as AudioClip;
+                                        AudioClip introMusic = Resources.Load(val) as AudioClip;
 
                                         //the whole following chunk should probably go into a function
                                         musicSources[currentMusicSource ? 1 : 0].clip = introMusic; 
@@ -497,8 +501,6 @@ public class LevelController : MonoBehaviour
         transform.position = GlobalTools.PixelSnap(new Vector3(scrollX, 0, transform.position.z)); //set the position, snapped to pixel
 
     }
-
-    //TODO: test spawning multiple objects
     void SpawnObject(LevelParser.LevelLine line, float offset = 0)
     {
         int CurrentArg = 0;
@@ -506,13 +508,14 @@ public class LevelController : MonoBehaviour
         string val = "";
         GetNextArgument();
 
-        string prefabPath = $"Prefabs/{val}";
-        ResourceRequest prefabResource = LoadAssets[prefabPath];
+        //string prefabPath = $"Prefabs/{val}";
+        //ResourceRequest prefabResource = LoadAssets[prefabPath];
+        ResourceRequest prefabResource = LoadAssets[val];
         GetNextArgument();
-        Vector3 SpawnPosition = LevelParser.ParseVector3(val);
-        //TODO: allow for horizontal offset if the path enters from top or bottom of screen
         Vector3 PositionOffset = new Vector3(0, offset, 0);
-        GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, SpawnPosition+PositionOffset, Quaternion.identity);
+        Vector3 SpawnPosition = LevelParser.ParseVector3(val)+PositionOffset;
+        //TODO: allow for horizontal offset if the path enters from top or bottom of screen
+        GameObject spawnedObject = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
         while (GetNextArgument()) //optional arguments
         {
             switch (arg)
@@ -523,8 +526,8 @@ public class LevelController : MonoBehaviour
                     spawnedObject.transform.SetParent(animParent.transform);
 
                     Animation anim = spawnedObject.GetComponent<Animation>();
-                    string animPath = $"Animations/{val}";
-                    AnimationClip animClip = LoadAssets[animPath].asset as AnimationClip;
+                    //string animPath = $"Animations/{val}";
+                    AnimationClip animClip = LoadAssets[val].asset as AnimationClip;
                     anim.clip = animClip;
                     anim.AddClip(animClip, animClip.name);
                     anim.Play(animClip.name);

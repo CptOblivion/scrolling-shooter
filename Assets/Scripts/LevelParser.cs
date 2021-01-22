@@ -197,7 +197,7 @@ public class LevelParser : MonoBehaviour
         return Output;
     }
 
-    public static LevelLine ParseLine(string fileLine, int LineNumber, List<string> LoadAssets)
+    public static LevelLine ParseLine(string fileLine, int LineNumber, List<string> PathsToLoad)
     {
         //Debug.Log($">{fileLine}<");
         LevelLine outputLine = new LevelLine();
@@ -388,20 +388,31 @@ public class LevelParser : MonoBehaviour
                 TryAddLoadAsset("Prefabs/", 0);
                 for (int i = 0; i < outputLine.Arguments.Length; i++)
                 {
-                    if (outputLine.Arguments[i].Argument == "Animation")
+                    switch (outputLine.Arguments[i].Argument)
                     {
-                        TryAddLoadAsset("Animations/", i);
-                        break;
-                    }
-                    if (outputLine.Arguments[i].Argument == "Path")
-                    {
-                        TryAddLoadAsset("Paths/", i);
-                        break;
+                        case "Animation":
+                            TryAddLoadAsset("Animations/", i);
+                            break;
+                        case "Path":
+                            TryAddLoadAsset("Paths/", i);
+                            break;
                     }
                 }
                 break;
             case AvailableCommands.PlaySound:
                 TryAddLoadAsset("Sounds/", 0);
+                break;
+            case AvailableCommands.PlayMusic:
+                TryAddLoadAsset("Sounds/Music/", 0);
+                for(int i = 0; i < outputLine.Arguments.Length; i++)
+                {
+                    switch (outputLine.Arguments[i].Argument)
+                    {
+                        case "Intro":
+                            TryAddLoadAsset("Sounds/Music/", i);
+                            break;
+                    }
+                }
                 break;
         }
 
@@ -410,10 +421,10 @@ public class LevelParser : MonoBehaviour
         //TODO: hopefully, by passing LoadAssets as an argument in the function, we're using a pointer and not a copy- so adding to it should update the version that's returned up top. (confirm this)
         void TryAddLoadAsset(string prefix, int arg)
         {
-            string PrefabString = prefix + outputLine.Arguments[arg].Value;
-            if (!LoadAssets.Contains(PrefabString))
+            outputLine.Arguments[arg].Value = prefix + outputLine.Arguments[arg].Value;
+            if (!PathsToLoad.Contains(outputLine.Arguments[arg].Value))
             {
-                LoadAssets.Add(PrefabString);
+                PathsToLoad.Add(outputLine.Arguments[arg].Value);
             }
         }
 

@@ -7,6 +7,8 @@ using System.ComponentModel;
 
 public class GlobalTools : MonoBehaviour
 {
+    public enum GameModes { Menu, Editor, Play}
+    public static GameModes Mode = GameModes.Menu;
     public static GlobalTools globalTools;
     public static Camera renderCam;
     public static Camera uiCam;

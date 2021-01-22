@@ -101,7 +101,6 @@ public class EnemyGeneric : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
         if (SpawnDelay > 0) //waiting our turn to spawn
         {
             SpawnDelay-= Time.deltaTime;
