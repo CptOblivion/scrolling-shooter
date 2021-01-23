@@ -1,4 +1,3 @@
-0 LevelMode Time
 0 ScrollSpeed 24
 
 //the water backdrop

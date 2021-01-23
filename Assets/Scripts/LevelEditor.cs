@@ -5,41 +5,63 @@ using UnityEngine.UI;
 
 public class LevelEditor : MonoBehaviour
 {
+
+    public Text scrollTimeReadout;
     class SpawnedObjectContainer
     {
         public GameObject obj;
         public Vector3 StartPosition;
-        public float StartTime;
+        public float TriggerTime;
+        public float TriggerPosition;
         public float Life;
         public Animation anim = null;
         public EnemyPath path = null;
+        public bool parallaxScroll = false;
         public int CommandIndex;
-        public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float time)
+
+        public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float triggerTime, float triggerPos)
         {
             obj = gameObject;
             CommandIndex = commandIndex;
             StartPosition = startPosition;
-            StartTime = time;
-            Life = 10;
+            TriggerTime = triggerTime;
+            TriggerPosition = triggerPos;
+            Life = -1;
             CommandIndex = commandIndex;
         }
     }
 
+    class ScrollSpeedChange
+    {
+        public float Time;
+        public float NewSpeed;
+        public float LerpTime;
+        public float PositionAtTime = -1;
+        public ScrollSpeedChange(float time, float speed, float lerpTime)
+        {
+            Time = time;
+            NewSpeed = speed;
+            LerpTime = lerpTime;
+        }
+    }
+
+    readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
+
     enum States {NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
-    public static float EditorDeltaTime = 0;
 
-    bool ScrollModeTime = false;
     float ScrollSpeed = 15;
 
     public TextAsset Level;
     public Scrollbar levelScroll;
     float LevelLength;
+    float LevelDuration = 0;
     float LevelPosition = 0;
     int ActiveCommand;
     int[] SelectedCommands;
     readonly float ScreenHeight = 48;
     readonly float LevelWidth = 96;
+    public float ScrollPosition;
     public List<LevelParser.LevelLine> LevelParsed = new List<LevelParser.LevelLine>();
     
     readonly Dictionary<string, ResourceRequest> LoadAssets = new Dictionary<string, ResourceRequest>();
@@ -76,7 +98,6 @@ public class LevelEditor : MonoBehaviour
                     LevelParsed = LevelParser.ParseFile(Level, out PathsToLoad);
                     foreach (string assetPath in PathsToLoad)
                     {
-                        Debug.Log(assetPath);
                         LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));
                     }
                     state = States.Loading;
@@ -107,48 +128,41 @@ public class LevelEditor : MonoBehaviour
         }
     }
 
-    private void LateUpdate()
-    {
-        EditorDeltaTime = 0;
-    }
-
     void PopulateLevel()
     {
         //TODO: use CurrentPosition with spawn commands to populate a level preview strip (just spawn the objects along the track, render into a very super tall texture?)
-        float CurrentPosition = 0;
-        float CurrentTime = 0;
-        for(int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
+        float TempPosition = 0;
+        float TempTime = 0;
+
+        BuildScrollSpeedCache();
+
+        for (int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
         {
             LevelParser.LevelLine line = LevelParsed[CurrentCommandIndex];
             //TODO: handle "time" mode
-
-            float newPosition = line.Position;
-            if (ScrollModeTime)
+            float newTime = line.Time;
+            if (!line.RelativePosition)
             {
-                if (!line.RelativePosition)
-                {
-                    newPosition -= CurrentTime;
-                }
-                CurrentTime += newPosition;
-                CurrentPosition += newPosition * ScrollSpeed;
-                //TODO: lerp speed
-                //TODO: currently doesn't work if absolute position is backwards from current position
+                newTime -= TempTime;
             }
-            else
+            TempTime += newTime;
+
+            //TODO: this is wasteful
+            //optimizations:
+            //  if current command is at same time as last, don't update TempPosition
+            //  some way to get the time of the last speed change, and just calculate forward from there?
+            TempPosition = GetDistanceTraveledAtTime(TempTime);
+
+            if (TempPosition > LevelLength)
             {
-                if (!line.RelativePosition)
-                {
-                    newPosition -= CurrentPosition;
-                }
-                CurrentPosition += newPosition;
+                LevelLength = TempPosition;
             }
 
-            if (CurrentPosition > LevelLength)
+            if (CurrentCommandIndex == LevelParsed.Count - 1)
             {
-                LevelLength = CurrentPosition;
+                LevelDuration = TempTime;
+                Debug.Log($"Level duration: {LevelDuration}");
             }
-
-            Debug.Log($"{CurrentPosition}, {line.Command}");
 
             string arg = "";
             string val = "";
@@ -156,16 +170,6 @@ public class LevelEditor : MonoBehaviour
 
             switch (line.Command)
             {
-                case LevelParser.AvailableCommands.LevelMode:
-                    GetNextArgument();
-                    if (val == "Distance") ScrollModeTime = false;
-                    else if (val == "Time") ScrollModeTime = true;
-                    break;
-                case LevelParser.AvailableCommands.ScrollSpeed:
-                    GetNextArgument();
-                    ScrollSpeed = float.Parse(val);
-                    //TODO: handle lerp
-                    break;
                 case LevelParser.AvailableCommands.Spawn:
                     GetNextArgument();
                     ResourceRequest prefabResource = LoadAssets[val];
@@ -175,36 +179,55 @@ public class LevelEditor : MonoBehaviour
                     Vector3 SpawnPosition = LevelParser.ParseVector3(val)+PositionOffset;
                     GameObject newOb = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
 
-                    Debug.Log($"spawned {newOb.name} \n");
+                    SpawnedObjectContainer newSpawn = new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, TempTime, TempPosition);
+                    SpawnedObjects.Add(newSpawn);
 
-                    SpawnedObjects.Add(new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, 100));
+                    while (GetNextArgument())
+                    {
+                        switch (arg)
+                        {
+                            case "Animation":
+                                GameObject spawnedObParent = new GameObject(newOb.name);
+                                spawnedObParent.transform.position = newOb.transform.position;
+                                newOb.transform.SetParent(spawnedObParent.transform, true);
+                                newSpawn.anim = newOb.GetComponent<Animation>();
+                                AnimationClip animClip = LoadAssets[val].asset as AnimationClip;
+                                newSpawn.anim.clip = animClip;
+                                newSpawn.anim.AddClip(animClip, animClip.name);
+                                newSpawn.anim.Stop();
+                                newSpawn.Life = newSpawn.anim.clip.length;
 
-                    //TODO: bool in SpawnedObjectContainer to keep track of if object has parallax
-                    //TODO: set path or anim
+                                break;
+                            case "Path":
+                                //TODO: implement
+                                break;
+                            case "Repeat":
+                                //TODO: implement (requires breaking spawn code out into a function, forgot to start with that)
+                                break;
+                        }
+                    }
                     //TODO: determine life
-                    //  if it has parallax, figure out how long it'll take to scroll offscreen (account for changes in move speed?)
                     //  if it has an animation, just base it on the duration of the animation
                     //  if it has a path, same deal
                     //TODO: see UpdateLevelScroll for udpating level position todo list
                     ParallaxScroll parallax = newOb.GetComponent<ParallaxScroll>();
                     if (parallax)
                     {
-                        parallax.enabled = false;
-                        //TODO: determine life 
+                        newSpawn.parallaxScroll = true;
+                        //TODO: get the actual object bound (check against all the renders in the object)
+                        float TopEdge = 0;
+                        foreach(Renderer renderer in newOb.GetComponentsInChildren<Renderer>())
+                        {
+                            if (renderer.bounds.max.y > TopEdge) TopEdge = renderer.bounds.max.y;
+                        }
+                        float TravelDistance = ParallaxScroll.DetermineLife(TopEdge, newOb.transform.position.z);
+
+                        //TODO: convert TravelDistance into a time, using ScrollSpeedCache and GetDistanceTraveledAtTime somehow
+                        newSpawn.Life = 100; //placeholder value
                     }
 
-                    //TODO: for all these helper components, have a base HelperComponent class that checks if we're in game or editor so we don't have to disable everything here
-                    //  although stuff like spawners should probably be recorded somehow on instantiation, so we can see them happen on scrolling up and down
-                    Spawner spawner = newOb.GetComponent<Spawner>();
-                    if (spawner)
-                    {
-                        spawner.enabled = false;
-                    }
-                    EnemyGeneric ai = newOb.GetComponent<EnemyGeneric>();
-                    if (ai)
-                    {
-                        ai.enabled = false;
-                    }
+                    Debug.Log($"{newOb}, {newSpawn.TriggerTime}, {newSpawn.TriggerPosition}");
+
                     break;
 
 
@@ -226,6 +249,8 @@ public class LevelEditor : MonoBehaviour
         //load prefabs
         //run through each line, place in scene
         //update levelLength as we go
+
+        UpdateLevelScroll(0);
     }
 
     void SelectLevel()
@@ -235,16 +260,144 @@ public class LevelEditor : MonoBehaviour
 
     void UpdateLevelScroll(float f)
     {
-        EditorDeltaTime = f*LevelLength - LevelPosition;
-        LevelPosition = f * LevelLength;
-        transform.position = new Vector3(0, LevelPosition, -10);
-        //TODO: update enemy positions
-        //  figure out which enemies should currently be alive (if we're after start time but before start time + life)
-        //  figure out where on the screen enemy should be
-        //      if it has parallax, perform a parallax scroll from its spawn point
-        //      if it has animation, just set the frame
-        //      if it has a path, determine the position along the path
+        //TODO: this scroll bar has to be converted to represent time, not distance traveled
+        if (f == 0)
+        {
+            f = .0001f;
+            //tiny offset to make sure commands at time 0 are present
+        }
+        EditorTime = f * LevelDuration;
+        if (scrollTimeReadout) scrollTimeReadout.text = EditorTime.ToString();
+
+        //when scrolling forward, we can just simulate the camera position from the current time to the new time
+        //when scrolling backwards, we have to simulate the camera position from the start of the level to the new position
+        //maybe we can cache this somehow and just rebuild the cache when scroll speed commands are entered/edited?
+        ScrollPosition = GetDistanceTraveledAtTime(f);
+        float DistanceSinceTrigger;
+        float TimeSinceTrigger;
+
+        foreach(SpawnedObjectContainer spawnedOb in SpawnedObjects)
+        {
+            DistanceSinceTrigger = ScrollPosition - spawnedOb.TriggerPosition;
+            TimeSinceTrigger = EditorTime - spawnedOb.TriggerTime;
+            float LifeEnd = LevelLength;
+            if (spawnedOb.Life > 0)
+            {
+                LifeEnd = spawnedOb.TriggerTime + spawnedOb.Life;
+            }
+            if (spawnedOb.TriggerTime < EditorTime && LifeEnd > EditorTime)
+            {
+                spawnedOb.obj.SetActive(true);
+                if (spawnedOb.parallaxScroll)
+                {
+                    spawnedOb.obj.transform.position = ParallaxScroll.ScrollAbsolute(spawnedOb.StartPosition, DistanceSinceTrigger);
+                }
+                else if (spawnedOb.anim)
+                {
+                    spawnedOb.anim.Play();
+                    spawnedOb.anim[spawnedOb.anim.clip.name].time = TimeSinceTrigger;
+                    spawnedOb.anim.Sample();
+                    spawnedOb.anim.Stop();
+                }
+                else if (spawnedOb.path)
+                {
+
+                }
+            }
+            else
+            {
+                spawnedOb.obj.SetActive(false);
+            }
+        }
     }
 
+    float GetDistanceTraveledAtTime(float TargetTime)
+    {
+        return GetDistanceTraveledAtTime(TargetTime, 0);
+    }
 
+    float GetDistanceTraveledAtTime(float TargetTime, float StartTime)
+    {
+        //TODO: the distance this is returning is SUPER wrong
+        float currentTime = StartTime;
+        float distance = 0;
+        float speed = 24;
+        float TimeStep = 1f / 60; //we can probably bump this down to 30, maybe even 15, without losing too much precision
+        //TODO: test precision with different timesteps
+        float LerpStartSpeed;
+
+        bool Seeking = true;
+
+
+        for (int cacheIndex = 0; cacheIndex < ScrollSpeedCache.Count; cacheIndex++)
+        {
+            ScrollSpeedChange current = ScrollSpeedCache[cacheIndex];
+
+            if (Seeking)
+            {
+                if (current.Time <= StartTime) //this is the first entry that's later than the start time
+                {
+                    //get the details of the last entry before the start time
+                    current = ScrollSpeedCache[cacheIndex-1];
+
+                    distance = current.PositionAtTime;
+                    currentTime = current.Time;
+                    Seeking = false;
+                    cacheIndex-=2;
+                }
+            }
+            else
+            {
+                if (current.Time >= TargetTime)
+                {
+                    return distance + (TargetTime - currentTime) * speed;
+                }
+                distance += (current.Time - currentTime) * speed;
+                LerpStartSpeed = speed;
+                for (float t = 0; t < current.LerpTime; t += TimeStep)
+                {
+                    speed = Mathf.Lerp(LerpStartSpeed, current.NewSpeed, t / current.LerpTime);
+                    distance += speed;
+                    if (currentTime + t > TargetTime) return distance;
+                }
+            }
+        }
+
+        return distance + (TargetTime - currentTime) * speed;
+    }
+
+    void BuildScrollSpeedCache()
+    {
+        //TODO: in the editor, ensure no scroll speed changes overlap one another
+        //TODO: rework with actual area-under-the-curve stuff
+        float TempTime = 0;
+        ScrollSpeedCache.Clear();
+        //first, once around to populate ScrollSpeedRef
+        for (int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
+        {
+            LevelParser.LevelLine line = LevelParsed[CurrentCommandIndex];
+            if (line.RelativePosition)
+            {
+                TempTime += line.Time;
+            }
+            else
+            {
+                TempTime = line.Time;
+            }
+            if (line.Command == LevelParser.AvailableCommands.ScrollSpeed)
+            {
+                float LerpTime = 0;
+                for (int i = 1; i < line.Arguments.Length; i++)
+                {
+                    if (line.Arguments[i].Argument == "Lerp")
+                    {
+                        LerpTime = float.Parse(line.Arguments[i].Value);
+                        break;
+                    }
+                }
+                ScrollSpeedCache.Add(new ScrollSpeedChange(TempTime, float.Parse(line.Arguments[0].Value), LerpTime));
+                ScrollSpeedCache[ScrollSpeedCache.Count - 1].PositionAtTime = GetDistanceTraveledAtTime(TempTime);
+            }
+        }
+    }
 }

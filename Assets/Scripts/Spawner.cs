@@ -48,6 +48,7 @@ public class Spawner : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (!GlobalTools.CheckIfPlaying(this)) return;
         if (spawnDelay > 0)
         {
             if (IntervalIsDistance) spawnDelay -= camScroll.ScrollSpeed * Time.deltaTime;

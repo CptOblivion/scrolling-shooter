@@ -18,7 +18,7 @@ public class LevelParser : MonoBehaviour
     public class LevelLine
     {
         public bool RelativePosition;
-        public float Position;
+        public float Time;
         public AvailableCommands Command;
         public LevelCommandArgument[] Arguments;
     }
@@ -43,6 +43,9 @@ public class LevelParser : MonoBehaviour
     [System.Serializable]
     public class LevelCommandArgument
     {
+        //TODO: change Argument to an int
+        //  then store each command's list of available arguments as enums
+        //  and cast them to and from int
         public string Argument;
         public string Value;
         public LevelCommandArgument(string arg, string val)
@@ -55,17 +58,14 @@ public class LevelParser : MonoBehaviour
     //TODO: maybe add some set of valid parameters, for error checking (or just handle error checking at the end of the ParseLine function)
     static readonly Dictionary<AvailableCommands, Command> Commands = new Dictionary<AvailableCommands, Command> {
         
-        {AvailableCommands.LevelMode,
-            new Command(new Command.Types[]{Command.Types.String })},
-        
         {AvailableCommands.ScrollSpeed,
             new Command(new Command.Types[]{Command.Types.Float }, new Dictionary<string, Command.Types>{
                 {"Lerp", Command.Types.Float }})},
 
         {AvailableCommands.Spawn,
             new Command(new Command.Types[]{
-                Command.Types.String,
-                Command.Types.Vector3 },
+                Command.Types.String /*path to prefab */,
+                Command.Types.Vector3 /*position */ }, 
                 new Dictionary<string, Command.Types>{
                     {"Animation", Command.Types.String }, //animation file to play (generally don't use with Path)
                     {"Path", Command.Types.String }, //path to follow (generally don't use with Animation)
@@ -75,15 +75,18 @@ public class LevelParser : MonoBehaviour
                     {"SendMessage",Command.Types.String }, //Bad, find another way to do this.
                     {"Multiple", Command.Types.Vector3 },
                     {"Repeat", Command.Types.Vector3 },
-                    {"Several", Command.Types.Vector3 } })}, //spawn several identical copies of this unit in a row- Vector2 entries are number of units, and delay between spawns
+                    {"Several", Command.Types.Vector3 } //spawn several identical copies of this unit in a row- Vector2 entries are number of units, and delay between spawns
+                })},
         
         {AvailableCommands.DisplayText,
             new Command(new Command.Types[]{
-                Command.Types.Float },
+                Command.Types.Float /*time that text stays up */ },
                 new Dictionary<string, Command.Types>{
                     {"Position",Command.Types.Vector3 },
                     {"Color", Command.Types.Vector4 },
-                    {"Size", Command.Types.Float }, })},
+                    {"Size", Command.Types.Float },
+                    {"Scroll", Command.Types.Bool } //NOT IMPLEMENTED YET
+                })},
         
         {AvailableCommands.PlaySound,
             new Command(new Command.Types[]{
@@ -91,7 +94,8 @@ public class LevelParser : MonoBehaviour
                 new Dictionary<string, Command.Types>{
                     {"Volume",Command.Types.Float },
                     {"Position", Command.Types.Vector3 },
-                    {"Pitch", Command.Types.Float  }, })},
+                    {"Pitch", Command.Types.Float  }
+                })},
         
         {AvailableCommands.PlayMusic,
             new Command(new Command.Types[]{
@@ -99,7 +103,8 @@ public class LevelParser : MonoBehaviour
                 new Dictionary<string, Command.Types>{
                     {"Crossfade", Command.Types.Float},
                     {"Lerp",Command.Types.Float },
-                    {"Intro",Command.Types.String } })},
+                    {"Intro",Command.Types.String }
+                })},
         
         //TODO: DefineVariable
         //TODO: figure out if there's actually a use for DefineVariable
@@ -109,7 +114,8 @@ public class LevelParser : MonoBehaviour
                 null,
                 new Dictionary<string, Command.Types>{
                     {"Count", Command.Types.Int },
-                    {"Additive",Command.Types.None } })},
+                    {"Additive",Command.Types.None }
+                })},
         //TODO: HoldForGroup
         
         //TODO: KillGroup
@@ -127,6 +133,7 @@ public class LevelParser : MonoBehaviour
             new Command(null)},
     };
 
+    //TODO: rip this whole thing out, just serialize the LevelLines list and save that instead of using a text file
     public static List<LevelLine> ParseFile(TextAsset file, out List<string> LoadAssets)
     {
         //TODO: read file header first
@@ -209,7 +216,7 @@ public class LevelParser : MonoBehaviour
         GetNextChunk();
 
         outputLine.RelativePosition = CurrentChunk.StartsWith(strAdditive);
-        outputLine.Position = float.Parse(CurrentChunk);
+        outputLine.Time = float.Parse(CurrentChunk);
         //Debug.Log($"Line position: {outputLine.Position}");
 
         //line command

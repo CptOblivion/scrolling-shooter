@@ -88,7 +88,7 @@ public class GlobalTools : MonoBehaviour
          * recommended to use an empty for analog movement, and then pixelsnap the child with the actual graphics
          * Try to use in LateUpdate whenever possible, in case any other movement gets applied to the object throughout the frame
          */
-        if (renderCam.targetTexture)
+        if (renderCam && renderCam.targetTexture)
         {
             float gridSize = PixelSize();
             float scale = 1 / gridSize;
@@ -99,7 +99,7 @@ public class GlobalTools : MonoBehaviour
 
             return pos;
         }
-        else return position;
+        return position;
     }
 
     public static AudioSource PlaySound(AudioClip audioClip, float Pitch = 1)
@@ -141,6 +141,17 @@ public class GlobalTools : MonoBehaviour
         else if (min.x - borderMargin > levelController.LevelWidth / 2) return false;
         else if (min.y - borderMargin > renderCam.orthographicSize) return false;
         else return true;
+    }
+
+    public static bool CheckIfPlaying(MonoBehaviour whosAsking)
+    {
+        if (Mode == GameModes.Play)
+        {
+            return true;
+        }
+        whosAsking.enabled = false;
+        return false;
+
     }
 
     public static void EndLevel(bool death)

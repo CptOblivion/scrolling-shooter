@@ -70,6 +70,7 @@ public class EnemyGeneric : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        if (!GlobalTools.CheckIfPlaying(this)) return;
         tf = GetComponent<Transform>();
         anim = GetComponent<Animation>();
         healthManager = GetComponent<HealthManager>();
@@ -101,6 +102,7 @@ public class EnemyGeneric : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (GlobalTools.CheckIfPlaying(this)) return;
         if (SpawnDelay > 0) //waiting our turn to spawn
         {
             SpawnDelay-= Time.deltaTime;
@@ -187,11 +189,14 @@ public class EnemyGeneric : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        HealthManager targetHealthManager = collision.gameObject.GetComponent<HealthManager>();
-        if (targetHealthManager)
+        if (GlobalTools.CheckIfPlaying(this))
         {
-            targetHealthManager.Damage(1);
-            healthManager.Damage(CrashDamage);
+            HealthManager targetHealthManager = collision.gameObject.GetComponent<HealthManager>();
+            if (targetHealthManager)
+            {
+                targetHealthManager.Damage(1);
+                healthManager.Damage(CrashDamage);
+            }
         }
     }
 

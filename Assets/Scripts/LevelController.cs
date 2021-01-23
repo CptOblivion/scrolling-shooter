@@ -87,8 +87,6 @@ public class LevelController : MonoBehaviour
     [HideInInspector]
     public float LevelTimeRelative = 0;
     [HideInInspector]
-    public bool LevelScrollModeTime = false;
-    [HideInInspector]
     public int LevelHolding = 0; //when greater than 0, level progress holds until something in the scene resumes it
     [HideInInspector]
     public bool PlayerDead = false; //if the player dies, halt the level file (no winnin' during the death animation for you, bucko)
@@ -236,18 +234,16 @@ public class LevelController : MonoBehaviour
                 {
                     float NextCommandDistance;
                     float LevelProgress;
-                    NextCommandDistance = levelParsed[LevelCommandIndex].Position;
+                    NextCommandDistance = levelParsed[LevelCommandIndex].Time;
 
                     //TODO: look over this, figure out what it's doing and why it's this way
                     if (levelParsed[LevelCommandIndex].RelativePosition)
                     {
-                        if (LevelScrollModeTime) LevelProgress = LevelTimeRelative;
-                        else LevelProgress = LevelPositionRelative;
+                        LevelProgress = LevelTimeRelative;
                     }
                     else //absolute offset mode
                     {
-                        if (LevelScrollModeTime) LevelProgress = LevelTime;
-                        else LevelProgress = LevelPosition;
+                        LevelProgress = LevelTime;
                     }
 
                     if (LevelProgress < NextCommandDistance) break; //we haven't reached the next command yet so let's just leave the loop until the next frame, alright?
@@ -265,11 +261,6 @@ public class LevelController : MonoBehaviour
 
                     switch (line.Command)
                     {
-                        case LevelParser.AvailableCommands.LevelMode:
-                            GetNextArgument();
-                            if (val == "Distance") LevelScrollModeTime = false;
-                            else if (val == "Time") LevelScrollModeTime = true;
-                            break;
                         case LevelParser.AvailableCommands.ScrollSpeed:
                             GetNextArgument();
                             float OldScrollSpeed = ScrollSpeed; //store in case we want to lerp from this value
@@ -438,7 +429,7 @@ public class LevelController : MonoBehaviour
                     if (!ExitLoop && LevelCommandIndex == levelParsed.Count)
                     {
                         Debug.Log("no LevelEnd in level file! Ending...");
-                        levelParsed.Add(new LevelParser.LevelLine {RelativePosition=true,Position=0,  Command=LevelParser.AvailableCommands.LevelEnd });
+                        levelParsed.Add(new LevelParser.LevelLine {RelativePosition=true,Time=0,  Command=LevelParser.AvailableCommands.LevelEnd });
                         ExitLoop = true;
                     }
                 }
