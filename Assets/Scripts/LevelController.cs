@@ -257,6 +257,7 @@ public class LevelController : MonoBehaviour
                     LevelPositionRelative = 0;
                     LevelTimeRelative = 0;
                     LevelParser.LevelLine line = levelParsed[LevelCommandIndex]; //the current line we're working on
+                    Debug.Log($"Command index {LevelCommandIndex}, pos: {LevelPosition}, Time: {LevelTime}");
 
                     int CurrentArg = 0;
                     string arg = "";

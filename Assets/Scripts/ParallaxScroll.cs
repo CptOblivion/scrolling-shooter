@@ -18,7 +18,7 @@ public class ParallaxScroll : MonoBehaviour
 
     void Update()
     {
-        tf.position = tf.position + GlobalTools.ParallaxScroll(tf.position.z);
+        tf.position = tf.position + Scroll(tf.position.z, LevelController.current.ScrollSpeed);
         GraphicsTf.position = GlobalTools.PixelSnap(tf.position);
 
         
@@ -30,6 +30,20 @@ public class ParallaxScroll : MonoBehaviour
                 if (!GlobalTools.CheckVisibility(this.gameObject)) Destroy(this.gameObject); //if offscreen, destroy (this method factors in children and shadowcasting)
             }
         }
+    }
+
+    public static Vector3 Scroll(float zOffset, float scrollSpeed)
+    {
+        /*
+         * this should be used in LateUpdate to make sure the camera has already done its moving this frame
+         */
+
+        float depthScale = 1.15f;//the closer this is to 1, the "narrower" the field of view (parallax effect is weaker)
+        //at depthScale 2, a depth of 5 is functionally infinitely far away (scrolling speed is ~0.03 of depth 0 speed)
+        //reccommend depthScale 1.15
+        float parallaxScale = Mathf.Pow(depthScale, -zOffset);
+        Vector3 parallaxOffset = new Vector3(0, -scrollSpeed * Time.deltaTime * parallaxScale, 0);
+        return parallaxOffset;
     }
 
     //TODO: move position position update into here, with a version that doesn't rely on GlobalTools.ParallaxScroll

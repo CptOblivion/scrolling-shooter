@@ -114,25 +114,32 @@ public class LevelEditor : MonoBehaviour
 
     void PopulateLevel()
     {
+        //TODO: use CurrentPosition with spawn commands to populate a level preview strip (just spawn the objects along the track, render into a very super tall texture?)
         float CurrentPosition = 0;
+        float CurrentTime = 0;
         for(int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
         {
             LevelParser.LevelLine line = LevelParsed[CurrentCommandIndex];
             //TODO: handle "time" mode
 
             float newPosition = line.Position;
-            if (!line.RelativePosition)
-            {
-                newPosition -= CurrentPosition;
-            }
             if (ScrollModeTime)
             {
+                if (!line.RelativePosition)
+                {
+                    newPosition -= CurrentTime;
+                }
+                CurrentTime += newPosition;
                 CurrentPosition += newPosition * ScrollSpeed;
                 //TODO: lerp speed
                 //TODO: currently doesn't work if absolute position is backwards from current position
             }
             else
             {
+                if (!line.RelativePosition)
+                {
+                    newPosition -= CurrentPosition;
+                }
                 CurrentPosition += newPosition;
             }
 
@@ -140,6 +147,8 @@ public class LevelEditor : MonoBehaviour
             {
                 LevelLength = CurrentPosition;
             }
+
+            Debug.Log($"{CurrentPosition}, {line.Command}");
 
             string arg = "";
             string val = "";
@@ -163,30 +172,41 @@ public class LevelEditor : MonoBehaviour
                     GetNextArgument();
                     float offset = 0; //TODO: get offset from multiples command (will require rearranging this stuff a bit)
                     Vector3 PositionOffset = new Vector3(0, offset, 0);
-                    Vector3 LevelOffset = new Vector3(0, CurrentPosition * ScrollSpeed) * -.1f; //TODO: why is this value so wrong, and wrong differently for each object
-                    Vector3 SpawnPosition = LevelParser.ParseVector3(val)+PositionOffset+LevelOffset;
+                    Vector3 SpawnPosition = LevelParser.ParseVector3(val)+PositionOffset;
                     GameObject newOb = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
 
-                    SpawnedObjects.Add(new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, 100));
-                    EnemyGeneric ai = newOb.GetComponent<EnemyGeneric>();
-                    if (ai)
-                    {
-                        ai.enabled = false;
-                    }
+                    Debug.Log($"spawned {newOb.name} \n");
 
-                    //TODO: store parallax in SpawnedObjectContainer, so we can use it while scrolling the view
+                    SpawnedObjects.Add(new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, 100));
+
+                    //TODO: bool in SpawnedObjectContainer to keep track of if object has parallax
+                    //TODO: set path or anim
+                    //TODO: determine life
+                    //  if it has parallax, figure out how long it'll take to scroll offscreen (account for changes in move speed?)
+                    //  if it has an animation, just base it on the duration of the animation
+                    //  if it has a path, same deal
+                    //TODO: see UpdateLevelScroll for udpating level position todo list
                     ParallaxScroll parallax = newOb.GetComponent<ParallaxScroll>();
                     if (parallax)
                     {
                         parallax.enabled = false;
+                        //TODO: determine life 
                     }
 
+                    //TODO: for all these helper components, have a base HelperComponent class that checks if we're in game or editor so we don't have to disable everything here
+                    //  although stuff like spawners should probably be recorded somehow on instantiation, so we can see them happen on scrolling up and down
                     Spawner spawner = newOb.GetComponent<Spawner>();
                     if (spawner)
                     {
                         spawner.enabled = false;
                     }
+                    EnemyGeneric ai = newOb.GetComponent<EnemyGeneric>();
+                    if (ai)
+                    {
+                        ai.enabled = false;
+                    }
                     break;
+
 
 
                     bool GetNextArgument()
@@ -217,8 +237,13 @@ public class LevelEditor : MonoBehaviour
     {
         EditorDeltaTime = f*LevelLength - LevelPosition;
         LevelPosition = f * LevelLength;
-        transform.position = new Vector3(0, LevelPosition, 0);
+        transform.position = new Vector3(0, LevelPosition, -10);
         //TODO: update enemy positions
+        //  figure out which enemies should currently be alive (if we're after start time but before start time + life)
+        //  figure out where on the screen enemy should be
+        //      if it has parallax, perform a parallax scroll from its spawn point
+        //      if it has animation, just set the frame
+        //      if it has a path, determine the position along the path
     }
 
 

@@ -101,21 +101,6 @@ public class GlobalTools : MonoBehaviour
         }
         else return position;
     }
-    
-    public static Vector3 ParallaxScroll(float zOffset)
-    {
-        /*
-         * this should be used in LateUpdate to make sure the camera has already done its moving this frame
-         */
-
-        float scrollSpeed = levelController.ScrollSpeed;
-        float depthScale = 1.15f;//the closer this is to 1, the "narrower" the field of view (parallax effect is weaker)
-        //at depthScale 2, a depth of 5 is functionally infinitely far away (scrolling speed is ~0.03 of depth 0 speed)
-        //reccommend depthScale 1.15
-        float parallaxScale = Mathf.Pow(depthScale, -zOffset);
-        Vector3 parallaxOffset = new Vector3(0, -scrollSpeed * Time.deltaTime * parallaxScale, 0);
-        return parallaxOffset;
-    }
 
     public static AudioSource PlaySound(AudioClip audioClip, float Pitch = 1)
     {

@@ -38,7 +38,7 @@ public class ParticleEffect : MonoBehaviour
 
         if (parallax)
         {
-            tf.position = tf.position + GlobalTools.ParallaxScroll(tf.position.z);
+            tf.position = tf.position + ParallaxScroll.Scroll(tf.position.z, LevelController.current.ScrollSpeed);
 
             if (tf.childCount == 1 && tf.GetChild(0).name == tf.gameObject.name)//if we have one child with the same name as us, we're a container object
             {
