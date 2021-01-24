@@ -64,7 +64,8 @@ public class ParallaxScroll : MonoBehaviour
     public static float DetermineLife(float TopEdge, float zOffset)
     {
         //TODO: this
-        //we're just outputting the distance here, this needs to be converted into time with potential travel speed changes factored in
+        //we're just outputting the distance here, this needs to then be converted into time with potential travel speed changes factored in
+
         return 0;
     }
 }

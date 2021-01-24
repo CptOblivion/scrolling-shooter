@@ -18,6 +18,7 @@ public class LevelEditor : MonoBehaviour
         public EnemyPath path = null;
         public bool parallaxScroll = false;
         public int CommandIndex;
+        public SpawnedObjectContainer[] SpawnerChildren; //TODO: set this up
 
         public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float triggerTime, float triggerPos)
         {
@@ -36,7 +37,6 @@ public class LevelEditor : MonoBehaviour
         public float Time;
         public float NewSpeed;
         public float LerpTime;
-        public float PositionAtTime = -1;
         public ScrollSpeedChange(float time, float speed, float lerpTime)
         {
             Time = time;
@@ -200,16 +200,15 @@ public class LevelEditor : MonoBehaviour
                                 break;
                             case "Path":
                                 //TODO: implement
+                                //TODO: determine life
                                 break;
                             case "Repeat":
                                 //TODO: implement (requires breaking spawn code out into a function, forgot to start with that)
                                 break;
                         }
                     }
-                    //TODO: determine life
-                    //  if it has an animation, just base it on the duration of the animation
-                    //  if it has a path, same deal
-                    //TODO: see UpdateLevelScroll for udpating level position todo list
+
+                    //TODO: move the following stuff to a function (since it'll need to call itself for adding things added by a spawner)
                     ParallaxScroll parallax = newOb.GetComponent<ParallaxScroll>();
                     if (parallax)
                     {
@@ -224,6 +223,13 @@ public class LevelEditor : MonoBehaviour
 
                         //TODO: convert TravelDistance into a time, using ScrollSpeedCache and GetDistanceTraveledAtTime somehow
                         newSpawn.Life = 100; //placeholder value
+                    }
+
+                    Spawner spawner = newOb.GetComponent<Spawner>();
+                    if (spawner)
+                    {
+                        //TODO: simulate spawner over the course of its life, populate those items into a list, store in newSpawn.spawnerChildren
+                        // also properly add children to SpawnedObjects
                     }
 
                     Debug.Log($"{newOb}, {newSpawn.TriggerTime}, {newSpawn.TriggerPosition}");
@@ -272,7 +278,7 @@ public class LevelEditor : MonoBehaviour
         //when scrolling forward, we can just simulate the camera position from the current time to the new time
         //when scrolling backwards, we have to simulate the camera position from the start of the level to the new position
         //maybe we can cache this somehow and just rebuild the cache when scroll speed commands are entered/edited?
-        ScrollPosition = GetDistanceTraveledAtTime(f);
+        ScrollPosition = GetDistanceTraveledAtTime(EditorTime);
         float DistanceSinceTrigger;
         float TimeSinceTrigger;
 
@@ -313,54 +319,24 @@ public class LevelEditor : MonoBehaviour
 
     float GetDistanceTraveledAtTime(float TargetTime)
     {
-        return GetDistanceTraveledAtTime(TargetTime, 0);
-    }
-
-    float GetDistanceTraveledAtTime(float TargetTime, float StartTime)
-    {
-        //TODO: the distance this is returning is SUPER wrong
-        float currentTime = StartTime;
+        //TODO: the distance this returns is SUPER wrong
+        float currentTime = 0;
         float distance = 0;
-        float speed = 24;
-        float TimeStep = 1f / 60; //we can probably bump this down to 30, maybe even 15, without losing too much precision
-        //TODO: test precision with different timesteps
-        float LerpStartSpeed;
-
-        bool Seeking = true;
-
+        float speed = 0;
 
         for (int cacheIndex = 0; cacheIndex < ScrollSpeedCache.Count; cacheIndex++)
         {
             ScrollSpeedChange current = ScrollSpeedCache[cacheIndex];
 
-            if (Seeking)
+            if (current.Time >= TargetTime)
             {
-                if (current.Time <= StartTime) //this is the first entry that's later than the start time
-                {
-                    //get the details of the last entry before the start time
-                    current = ScrollSpeedCache[cacheIndex-1];
+                return distance + (TargetTime - currentTime) * speed;
+            }
+            distance += (current.Time - currentTime) * speed;
+            distance += AreaUnderLerp(speed, current.NewSpeed, current.LerpTime);
+            speed = current.NewSpeed;
 
-                    distance = current.PositionAtTime;
-                    currentTime = current.Time;
-                    Seeking = false;
-                    cacheIndex-=2;
-                }
-            }
-            else
-            {
-                if (current.Time >= TargetTime)
-                {
-                    return distance + (TargetTime - currentTime) * speed;
-                }
-                distance += (current.Time - currentTime) * speed;
-                LerpStartSpeed = speed;
-                for (float t = 0; t < current.LerpTime; t += TimeStep)
-                {
-                    speed = Mathf.Lerp(LerpStartSpeed, current.NewSpeed, t / current.LerpTime);
-                    distance += speed;
-                    if (currentTime + t > TargetTime) return distance;
-                }
-            }
+            currentTime = current.Time + current.LerpTime;
         }
 
         return distance + (TargetTime - currentTime) * speed;
@@ -371,6 +347,8 @@ public class LevelEditor : MonoBehaviour
         //TODO: in the editor, ensure no scroll speed changes overlap one another
         //TODO: rework with actual area-under-the-curve stuff
         float TempTime = 0;
+        //float TempDistance = 0;
+        //float TempSpeed = 0;
         ScrollSpeedCache.Clear();
         //first, once around to populate ScrollSpeedRef
         for (int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
@@ -378,10 +356,12 @@ public class LevelEditor : MonoBehaviour
             LevelParser.LevelLine line = LevelParsed[CurrentCommandIndex];
             if (line.RelativePosition)
             {
+                //TempDistance += line.Time * TempSpeed;
                 TempTime += line.Time;
             }
             else
             {
+                //TempDistance += line.Time-TempTime * TempSpeed;
                 TempTime = line.Time;
             }
             if (line.Command == LevelParser.AvailableCommands.ScrollSpeed)
@@ -396,8 +376,14 @@ public class LevelEditor : MonoBehaviour
                     }
                 }
                 ScrollSpeedCache.Add(new ScrollSpeedChange(TempTime, float.Parse(line.Arguments[0].Value), LerpTime));
-                ScrollSpeedCache[ScrollSpeedCache.Count - 1].PositionAtTime = GetDistanceTraveledAtTime(TempTime);
             }
         }
+    }
+
+    float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
+    {
+        float output = LerpTime * Mathf.Min(StartSpeed, EndSpeed); //area of the square up to the lowest part of the current chunk of the line
+        output += LerpTime * Mathf.Abs(StartSpeed - EndSpeed) / 2; //area of the triangle of the change in speed
+        return output;
     }
 }
