@@ -45,8 +45,8 @@
 
 +2.25 HoldForDeath Count=0
 +0 Spawn	Enemies/Enemy_Turret_Artillery 0,40,10 DeathEvent HealthDelay=4 SendMessage=SetFireStartup,float,4
-+3 ScrollSpeed 0 Lerp=1
-+0 HoldForDeath Additive
++3 ScrollSpeed 0 Lerp=1 //return lerp to 1 when done testing
++1 HoldForDeath Additive
 +0 ScrollSpeed 24 Lerp=.2
 //+0 PlayMusic None Lerp=.5
 
@@ -81,7 +81,7 @@
 +.5		Spawn Enemies/Enemy_Turret_Artillery -20,40,10 DeathEvent HealthDelay=5.5 SendMessage=SetFireStartup,float,4
 +.05	Spawn Enemies/Enemy_Turret_Artillery 20,40,10 DeathEvent HealthDelay=5 SendMessage=SetFireStartup,float,4
 +3		ScrollSpeed 0 Lerp=2
-+0 HoldForDeath Count=5 Additive
++2 HoldForDeath Count=5 Additive
 +0 ScrollSpeed 24 Lerp=.5
 +0 PlayMusic None Lerp=.5
 

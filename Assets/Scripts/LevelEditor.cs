@@ -333,10 +333,18 @@ public class LevelEditor : MonoBehaviour
                 return distance + (TargetTime - currentTime) * speed;
             }
             distance += (current.Time - currentTime) * speed;
+
+            currentTime = current.Time;
+            if (TargetTime < currentTime + current.LerpTime)
+            {
+                float NewLerpTime = TargetTime - currentTime;
+                distance += AreaUnderLerp(speed, Mathf.Lerp(speed, current.NewSpeed, NewLerpTime/current.LerpTime), NewLerpTime);
+                return distance;
+            }
             distance += AreaUnderLerp(speed, current.NewSpeed, current.LerpTime);
             speed = current.NewSpeed;
 
-            currentTime = current.Time + current.LerpTime;
+            currentTime += current.LerpTime;
         }
 
         return distance + (TargetTime - currentTime) * speed;
