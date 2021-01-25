@@ -71,7 +71,7 @@
 +1 Spawn	Enemies/Enemy_Shooter	0,0,0 Animation=MovementPaths/EnemyPath_ShooterGenericR
 +2 Spawn	Enemies/Enemy_Shooter	0,8,0 Animation=MovementPaths/EnemyPath_ShooterGenericL
 
-+4 Spawn Powerup 0,22,0
++4 Spawn Powerup 0,26,0
 
 +1 HoldForDeath Count=0
 //+0 PlayMusic Music_Boss Lerp=.5
@@ -88,4 +88,4 @@
 +3 DisplayText "yey" .2 Color=.2,.2,1,1
 
 +.5 VictoryAnim
-+3 LevelEnd
++8 LevelEnd

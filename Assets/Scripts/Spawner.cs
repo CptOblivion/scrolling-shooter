@@ -4,11 +4,6 @@ using UnityEngine;
 
 public class Spawner : MonoBehaviour
 {
-    /*
-     * TO DO:
-     * add spawned objects into empty object (to allow animation offset)
-     */
-
     [Tooltip("object to spawn")]
     public GameObject spawn;
     [Tooltip("animation to use as path for spawned objects to follow")]
@@ -34,31 +29,25 @@ public class Spawner : MonoBehaviour
     [Tooltip("random offset for the vertical position (in either direction)")]
     public float randomY = 0;
 
-    Transform tf;
-    LevelController camScroll;
 
-    // Start is called before the first frame update
     void Start()
     {
-        tf = GetComponent<Transform>();
-        camScroll = GameObject.FindObjectOfType<LevelController>(); 
         spawnIntervalTimer = 0;
     }
 
-    // Update is called once per frame
     void Update()
     {
         if (!GlobalTools.CheckIfPlaying(this)) return;
         if (spawnDelay > 0)
         {
-            if (IntervalIsDistance) spawnDelay -= camScroll.ScrollSpeed * Time.deltaTime;
+            if (IntervalIsDistance) spawnDelay -= LevelController.current.ScrollSpeed * Time.deltaTime;
             else spawnDelay -= Time.deltaTime;
         }
         else
         {
             if (spawnIntervalTimer > 0)
             {
-                if (IntervalIsDistance) spawnIntervalTimer -= camScroll.ScrollSpeed * Time.deltaTime;
+                if (IntervalIsDistance) spawnIntervalTimer -= LevelController.current.ScrollSpeed * Time.deltaTime;
                 else spawnIntervalTimer -= Time.deltaTime;
             }
             else
@@ -66,8 +55,8 @@ public class Spawner : MonoBehaviour
                 GameObject spawnedOb;
                 float xOffset = Random.Range(-randomX, randomX);
                 float yOffset = Random.Range(-randomY, randomY);
-                Vector3 spawnPos = new Vector3(tf.position.x + xOffset, tf.position.y + yOffset, tf.position.z);
-                if (LocalCoordinates) spawnedOb = Instantiate(spawn, spawnPos, Quaternion.identity, tf);
+                Vector3 spawnPos = new Vector3(transform.position.x + xOffset, transform.position.y + yOffset, transform.position.z);
+                if (LocalCoordinates) spawnedOb = Instantiate(spawn, spawnPos, Quaternion.identity, transform);
                 else spawnedOb = Instantiate(spawn, spawnPos, Quaternion.identity);
 
                 if (animPath != null)//if we have an animation to assign to the spawned object
@@ -77,9 +66,9 @@ public class Spawner : MonoBehaviour
                     Transform spawnParentTf = spawnParent.GetComponent<Transform>();
                     Transform spawnedObTf = spawnedOb.GetComponent<Transform>();
 
-                    if (LocalCoordinates) spawnParentTf.parent = tf; //if the spawned object is parented to the spawner, pass it along to the spawned parent
+                    if (LocalCoordinates) spawnParentTf.parent = transform; //if the spawned object is parented to the spawner, pass it along to the spawned parent
                     spawnParentTf.position = spawnPos;
-                    spawnParentTf.rotation = tf.rotation;
+                    spawnParentTf.rotation = transform.rotation;
                     spawnParentTf.localScale = new Vector3(-1, 1, 1);//not sure why it's important to invert the X scale, but apparently it is.
                     spawnedObTf.parent = spawnParentTf;
                     //we don't need to bother setting location for the spawned object back to 0,0,0, 'cause the animation will override it anyways

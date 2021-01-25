@@ -168,8 +168,7 @@ public class LevelController : MonoBehaviour
 
         if (Level != null)
         {
-            List<string> PathsToLoad;
-            levelParsed = LevelParser.ParseFile(Level, out PathsToLoad);
+            levelParsed = LevelParser.ParseFile(Level, out List<string> PathsToLoad);
             foreach (string assetPath in PathsToLoad)
             {
                 LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));

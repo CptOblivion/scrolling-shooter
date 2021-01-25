@@ -23,7 +23,7 @@ public class ParallaxScroll : MonoBehaviour
     void Update()
     {
         if (!GlobalTools.CheckIfPlaying(this)) return; //abort if we're spawned in a menu or the editor
-        tf.position = tf.position + Scroll(tf.position.z, LevelController.current.ScrollSpeed);
+        tf.position += Scroll(tf.position.z, LevelController.current.ScrollSpeed);
         GraphicsTf.position = GlobalTools.PixelSnap(tf.position);
 
 
@@ -65,7 +65,6 @@ public class ParallaxScroll : MonoBehaviour
     {
         //TODO: this
         //we're just outputting the distance here, this needs to then be converted into time with potential travel speed changes factored in
-
-        return 0;
+        return (LevelEditor.ScreenHeight / 2 + TopEdge) / Mathf.Pow(depthScale, -zOffset);
     }
 }
