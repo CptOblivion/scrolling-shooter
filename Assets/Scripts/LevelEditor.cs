@@ -3,46 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 public class LevelEditor : MonoBehaviour
 {
     public Text scrollTimeReadout;
-    class SpawnedObjectContainer
-    {
-        public GameObject obj;
-        public Vector3 StartPosition;
-        public float TriggerTime;
-        public float TriggerPosition;
-        public float Life;
-        public Animation anim = null;
-        public EnemyPath path = null;
-        public bool parallaxScroll = false;
-        public int CommandIndex;
-        public int ParentSpawnedObject;
-        public SpawnedObjectContainer[] SpawnerChildren;
-        public UILine line = null;
-
-        public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float triggerTime, float triggerPos)
-        {
-            CommandIndex = commandIndex;
-            InstantiateBase(gameObject, startPosition, triggerTime, triggerPos);
-        }
-
-        public SpawnedObjectContainer(GameObject gameObject, Vector3 startPosition, float triggerTime, float triggerPos)
-        {
-            InstantiateBase(gameObject, startPosition, triggerTime, triggerPos);
-        }
-
-        private void InstantiateBase(GameObject gameObject, Vector3 startPosition, float triggerTime, float triggerPos)
-        {
-            obj = gameObject;
-            StartPosition = startPosition;
-            TriggerTime = triggerTime;
-            TriggerPosition = triggerPos;
-            Life = -1;
-            ParentSpawnedObject = -1;
-        }
-    }
 
     class ScrollSpeedChange
     {
@@ -57,17 +22,23 @@ public class LevelEditor : MonoBehaviour
         }
     }
 
+    public InputActionAsset actionMapUI;
+    InputAction mousePos;
+    InputAction leftClick;
     readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
 
     enum States {NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
 
+    public RectTransform UILinesLayer;
     public TextAsset Level;
     public Scrollbar levelScroll;
     float LevelLength;
     float LevelDuration = 0;
-    int ActiveCommand;
-    int[] SelectedCommands;
+
+    LevelEditorSpawnedCommand HoveredCommand = null;
+    LevelEditorSpawnedCommand SelectedCommand = null;
+
     public static readonly float ScreenHeight = 48;
     readonly float LevelWidth = 96;
     public float ScrollPosition;
@@ -75,37 +46,50 @@ public class LevelEditor : MonoBehaviour
     public Toggle UIShowSpawnLines;
     public RectTransform ShowLevelFrame;
 
+    public Color CommandLineColor = Color.white;
+    public Color SpawnerChildLineColor = Color.green/2;
+    public Color MultipleChildLineColor = Color.red / 2;
+    public Color CommandLineSelectedColor = Color.white;
+    public float TailLength = 40;
+
     int WindowResizeStage = 0;
     Vector2 OldWindowSize = Vector2.zero;
+    public static LevelEditor current;
 
     Camera cam;
 
-    public float UILineWidth = 10;
-    
+    public float UILineWidth = 2;
+    public float UILineHoveredWidth = 3;
+
     readonly Dictionary<string, ResourceRequest> LoadAssets = new Dictionary<string, ResourceRequest>();
 
     States state = States.NoLevel;
 
     static readonly float LevelHoldDelay = 5;
 
-    readonly List<SpawnedObjectContainer> SpawnedObjects = new List<SpawnedObjectContainer>();
+    readonly List<LevelEditorSpawnedCommand.SpawnedObjectContainer> SpawnedObjects = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
     void Awake()
     {
+        current = this;
         if (Level == null)
         {
             SelectLevel();
         }
         cam = GetComponent<Camera>();
+        mousePos = actionMapUI.FindAction("Point");
+        leftClick = actionMapUI.FindAction("Click");
     }
 
     private void OnEnable()
     {
         GlobalTools.Mode = GlobalTools.GameModes.Editor;
         levelScroll.onValueChanged.AddListener(UpdateLevelScroll);
+        UIShowSpawnLines.onValueChanged.AddListener(UpdateUILines);
     }
     private void OnDisable()
     {
         levelScroll.onValueChanged.RemoveListener(UpdateLevelScroll);
+        UIShowSpawnLines.onValueChanged.RemoveListener(UpdateUILines);
     }
 
     private void Update()
@@ -138,6 +122,7 @@ public class LevelEditor : MonoBehaviour
                 {
                     PopulateLevel();
                     state = States.Editing;
+                    actionMapUI.Enable();
                 }
 
                 break;
@@ -147,7 +132,46 @@ public class LevelEditor : MonoBehaviour
                     WindowResizeStage = 0;
                     OldWindowSize = new Vector2(Screen.width, Screen.height);
                 }
-                UpdateWindowShape();
+                if (!UpdateWindowShape())
+                {
+                    //raycast mouse into scene
+                    RaycastHit2D hit = Physics2D.Raycast(cam.ScreenToWorldPoint(mousePos.ReadValue<Vector2>()), Vector2.zero);
+                    if (hit.collider != null)
+                    {
+                        LevelEditorSpawnedCommand com = hit.collider.GetComponent<LevelEditorSpawnedCommand>();
+                        if (com)
+                        {
+                            if (com != HoveredCommand)
+                            {
+                                if (HoveredCommand)
+                                    HoveredCommand.command.HoverExit();
+                                com.command.HoverEnter();
+                                HoveredCommand = com;
+                            }
+                            if (leftClick.triggered)
+                            {
+                                Debug.Log(hit.collider, hit.collider.gameObject);
+                                //set as active command
+                            }
+                        }
+                        else
+                        {
+                            if (HoveredCommand)
+                            {
+                                HoveredCommand.command.HoverExit();
+                                HoveredCommand = null;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (HoveredCommand)
+                        {
+                            HoveredCommand.command.HoverExit();
+                            HoveredCommand = null;
+                        }
+                    }
+                }
                 break;
             case States.Testing:
                 break;
@@ -214,9 +238,13 @@ public class LevelEditor : MonoBehaviour
                     Vector3 SpawnPosition = LevelParser.ParseVector3(val);
                     GameObject newOb = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
 
-                    SpawnedObjectContainer newSpawn = new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, TempTime, TempPosition);
+
+                    LevelEditorSpawnedCommand.SpawnedObjectContainer newSpawn = new LevelEditorSpawnedCommand.SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, TempTime, TempPosition);
                     SpawnedObjects.Add(newSpawn);
-                    newSpawn.line = UILine.NewLine(UILineWidth);
+                    newOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
+                    newSpawn.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                    newSpawn.line.SetTail(TailLength);
+                    newSpawn.baseColor = CommandLineColor;
 
                     int multiples = 0;
                     float multipleDelay = 0;
@@ -256,7 +284,7 @@ public class LevelEditor : MonoBehaviour
                     Spawner spawner = newOb.GetComponent<Spawner>();
                     if (spawner)
                     {
-                        List<SpawnedObjectContainer> tempSpawnerChildren = new List<SpawnedObjectContainer>();
+                        List<LevelEditorSpawnedCommand.SpawnedObjectContainer> tempSpawnerChildren = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
                         float SpawnerTimer;
                         float SpawnerDistance;
                         int SpawnerCount = spawner.spawnCount;
@@ -283,13 +311,15 @@ public class LevelEditor : MonoBehaviour
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity, spawner.transform);
                             else
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity);
+                            spawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
                             //TODO: handle animation (or just strip that option from the spawner class, that might be better)
 
-                            SpawnedObjectContainer newChild = new SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
+                            LevelEditorSpawnedCommand.SpawnedObjectContainer newChild = new LevelEditorSpawnedCommand.SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
 
                             tempSpawnerChildren.Add(newChild);
                             DetermineLifespan(newChild, SpawnerTimer + TempTime);
-                            newChild.line = UILine.NewLine(UILineWidth);
+                            newChild.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                            newChild.baseColor =SpawnerChildLineColor;
 
                             SpawnerCount--;
                             if (SpawnerCount == 0)
@@ -318,8 +348,8 @@ public class LevelEditor : MonoBehaviour
                     }
                     else if (multiples > 0)
                     {
-                        newSpawn.SpawnerChildren = new SpawnedObjectContainer[multiples];
-                        for(int i = 0; i < multiples; i++)
+                        newSpawn.SpawnerChildren = new LevelEditorSpawnedCommand.SpawnedObjectContainer[multiples-1];
+                        for(int i = 1; i < multiples; i++)
                         {
                             GameObject child;
                             if (newSpawn.anim)
@@ -332,15 +362,23 @@ public class LevelEditor : MonoBehaviour
                                 child = Instantiate(newOb);
                                 child.transform.position += new Vector3(0, multipleOffset * i, 0);
                             }
+
+                            child.GetComponent<LevelEditorSpawnedCommand>().command = newSpawn; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
+
                             float childTime = TempTime + (multipleDelay * i);
-                            SpawnedObjectContainer childContainer = new SpawnedObjectContainer(child, child.transform.position, childTime, GetDistanceTraveledAtTime(childTime));
-                            newSpawn.SpawnerChildren[i] = childContainer;
-                            childContainer.line = UILine.NewLine(UILineWidth);
+                            LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, childTime, GetDistanceTraveledAtTime(childTime));
+                            
+                            newSpawn.SpawnerChildren[i - 1] = childContainer;
+                            childContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                            childContainer.baseColor = MultipleChildLineColor;
                             DetermineLifespan(childContainer, childTime);
                         }
                     }
 
-                    void DetermineLifespan(SpawnedObjectContainer container, float time)
+                    newSpawn.Deselected();
+                    newSpawn.HoverExit();
+
+                    void DetermineLifespan(LevelEditorSpawnedCommand.SpawnedObjectContainer container, float time)
                     {
                         ParallaxScroll parallax = container.obj.GetComponent<ParallaxScroll>();
                         Animation anim = container.obj.GetComponent<Animation>();
@@ -410,12 +448,12 @@ public class LevelEditor : MonoBehaviour
         float DistanceSinceTrigger;
         float TimeSinceTrigger;
 
-        foreach(SpawnedObjectContainer spawnedOb in SpawnedObjects)
+        foreach(LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedOb in SpawnedObjects)
         {
             UpdateObject(spawnedOb);
             if (spawnedOb.SpawnerChildren != null)
             {
-                foreach(SpawnedObjectContainer spawnedObChild in spawnedOb.SpawnerChildren)
+                foreach(LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObChild in spawnedOb.SpawnerChildren)
                 {
                     UpdateObject(spawnedObChild);
                 }
@@ -424,7 +462,7 @@ public class LevelEditor : MonoBehaviour
 
         UpdateUILines();
 
-        void UpdateObject(SpawnedObjectContainer ob)
+        void UpdateObject(LevelEditorSpawnedCommand.SpawnedObjectContainer ob)
         {
 
             DistanceSinceTrigger = ScrollPosition - ob.TriggerPosition;
@@ -608,7 +646,7 @@ public class LevelEditor : MonoBehaviour
             }
         }
     }
-    void UpdateWindowShape()
+    bool UpdateWindowShape()
     {
         if (WindowResizeStage == 0)
         {
@@ -618,7 +656,6 @@ public class LevelEditor : MonoBehaviour
             float ratio = LevelWidth / ScreenHeight;
             Vector2 FrameOffsets = new Vector2((CurrentCorners[2].x - CurrentCorners[0].x), (CurrentCorners[2].y - CurrentCorners[0].y));
 
-            Debug.Log($"{ratio}, {FrameOffsets.x / FrameOffsets.y}");
             if (FrameOffsets.x / FrameOffsets.y > ratio)
             {
                 cam.orthographicSize *= ScreenHeight / FrameOffsets.y;
@@ -628,8 +665,11 @@ public class LevelEditor : MonoBehaviour
                 cam.orthographicSize *= LevelWidth / FrameOffsets.x;
             }
             WindowResizeStage++;
+            UpdateUILines();
+            return true;
         }
-        else if (WindowResizeStage == 1)
+
+        if (WindowResizeStage == 1)
         {
             Vector3[] CurrentCorners = new Vector3[4];
             ShowLevelFrame.GetWorldCorners(CurrentCorners);
@@ -637,7 +677,15 @@ public class LevelEditor : MonoBehaviour
                 (CurrentCorners[2].x + CurrentCorners[0].x) / 2,
                 (CurrentCorners[2].y + CurrentCorners[0].y) / 2);
             WindowResizeStage++;
+            UpdateUILines();
+            return true;
         }
+        if (WindowResizeStage == 2)
+        {
+            UpdateUILines();
+            WindowResizeStage++;
+        }
+        return false;
     }
     void UpdateLevelLength()
     {
@@ -654,32 +702,37 @@ public class LevelEditor : MonoBehaviour
 
     void UpdateUILines()
     {
-        foreach (SpawnedObjectContainer container in SpawnedObjects)
+        foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer container in SpawnedObjects)
         {
-            UpdateUILine(container, new Vector3(0, container.TriggerPosition - ScrollPosition));
+            float VertPos = (container.TriggerTime / LevelDuration * (1-levelScroll.size) + levelScroll.size/2) * ScreenHeight - ScreenHeight / 2;
+            UpdateUILine(container, new Vector3(LevelWidth/2, VertPos));
 
             if (container.SpawnerChildren != null)
             {
-                foreach (SpawnedObjectContainer childContainer in container.SpawnerChildren)
+                foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in container.SpawnerChildren)
                 {
                     UpdateUILine(childContainer, container.obj.transform.position);
                 }
             }
         }
-        void UpdateUILine(SpawnedObjectContainer container, Vector3 target)
+        void UpdateUILine(LevelEditorSpawnedCommand.SpawnedObjectContainer container, Vector3 target)
         {
             if (container.line)
             {
                 if (UIShowSpawnLines.isOn && container.obj.activeInHierarchy)
                 {
-                    container.line.gameObject.SetActive(true);
+                    container.line.SetActive(true);
                     container.line.UpdateLine(container.obj.transform.position, target);
                 }
                 else
                 {
-                    container.line.gameObject.SetActive(false);
+                    container.line.SetActive(false);
                 }
             }
         }
+    }
+    void UpdateUILines(bool b)
+    {
+        UpdateUILines();
     }
 }
