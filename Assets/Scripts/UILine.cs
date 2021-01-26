@@ -50,7 +50,7 @@ public class UILine : MonoBehaviour
         t.pivot = new Vector2(.5f, 0);
         t.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 1);
         t.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
-        newLine.LineWidth = width;
+        newLine.SetWidth(width);
         newLine.UpdateLine();
         return newLine;
     }
@@ -65,6 +65,7 @@ public class UILine : MonoBehaviour
     }
     public void SetWidth(float w)
     {
+        //TODO: factor in pixel size
         LineWidth = w;
         ((RectTransform)transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, LineWidth);
         if (tail)

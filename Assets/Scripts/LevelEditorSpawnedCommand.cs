@@ -47,6 +47,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour
             {
                 line.SetColor(LevelEditor.current.CommandLineSelectedColor);
                 line.SetWidth(LevelEditor.current.UILineHoveredWidth);
+                line.transform.SetAsLastSibling();
             }
             if (SpawnerChildren != null)
             {
@@ -56,6 +57,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour
                     {
                         child.line.SetColor(LevelEditor.current.CommandLineSelectedColor);
                         child.line.SetWidth(LevelEditor.current.UILineHoveredWidth);
+                        child.line.transform.SetAsLastSibling();
                     }
                 }
             }
