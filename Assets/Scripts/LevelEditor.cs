@@ -20,6 +20,7 @@ public class LevelEditor : MonoBehaviour
         public int CommandIndex;
         public int ParentSpawnedObject;
         public SpawnedObjectContainer[] SpawnerChildren;
+        public UILine line = null;
 
         public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float triggerTime, float triggerPos)
         {
@@ -71,6 +72,15 @@ public class LevelEditor : MonoBehaviour
     readonly float LevelWidth = 96;
     public float ScrollPosition;
     public List<LevelParser.LevelLine> LevelParsed = new List<LevelParser.LevelLine>();
+    public Toggle UIShowSpawnLines;
+    public RectTransform ShowLevelFrame;
+
+    int WindowResizeStage = 0;
+    Vector2 OldWindowSize = Vector2.zero;
+
+    Camera cam;
+
+    public float UILineWidth = 10;
     
     readonly Dictionary<string, ResourceRequest> LoadAssets = new Dictionary<string, ResourceRequest>();
 
@@ -85,6 +95,7 @@ public class LevelEditor : MonoBehaviour
         {
             SelectLevel();
         }
+        cam = GetComponent<Camera>();
     }
 
     private void OnEnable()
@@ -131,10 +142,17 @@ public class LevelEditor : MonoBehaviour
 
                 break;
             case States.Editing:
+                if (Screen.width != OldWindowSize.x || Screen.height != OldWindowSize.y)
+                {
+                    WindowResizeStage = 0;
+                    OldWindowSize = new Vector2(Screen.width, Screen.height);
+                }
+                UpdateWindowShape();
                 break;
             case States.Testing:
                 break;
         }
+
     }
 
     void PopulateLevel()
@@ -198,6 +216,7 @@ public class LevelEditor : MonoBehaviour
 
                     SpawnedObjectContainer newSpawn = new SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, TempTime, TempPosition);
                     SpawnedObjects.Add(newSpawn);
+                    newSpawn.line = UILine.NewLine(UILineWidth);
 
                     int multiples = 0;
                     float multipleDelay = 0;
@@ -270,6 +289,7 @@ public class LevelEditor : MonoBehaviour
 
                             tempSpawnerChildren.Add(newChild);
                             DetermineLifespan(newChild, SpawnerTimer + TempTime);
+                            newChild.line = UILine.NewLine(UILineWidth);
 
                             SpawnerCount--;
                             if (SpawnerCount == 0)
@@ -291,7 +311,6 @@ public class LevelEditor : MonoBehaviour
                         }
 
                         newSpawn.SpawnerChildren = tempSpawnerChildren.ToArray();
-                        Debug.Log(newSpawn.SpawnerChildren.Length);
 
                         //TODO: simulate spawner over the course of its life, populate those items into a list, store in newSpawn.spawnerChildren
                         // also properly add children to SpawnedObjects
@@ -316,6 +335,7 @@ public class LevelEditor : MonoBehaviour
                             float childTime = TempTime + (multipleDelay * i);
                             SpawnedObjectContainer childContainer = new SpawnedObjectContainer(child, child.transform.position, childTime, GetDistanceTraveledAtTime(childTime));
                             newSpawn.SpawnerChildren[i] = childContainer;
+                            childContainer.line = UILine.NewLine(UILineWidth);
                             DetermineLifespan(childContainer, childTime);
                         }
                     }
@@ -344,7 +364,7 @@ public class LevelEditor : MonoBehaviour
 
                         else
                         {
-                            container.Life = LevelDuration - container.TriggerTime + .001f;
+                            container.Life = LevelDuration - container.TriggerTime;
                         }
                     }
 
@@ -369,7 +389,7 @@ public class LevelEditor : MonoBehaviour
         //load prefabs
         //run through each line, place in scene
         //update levelLength as we go
-
+        UpdateLevelLength();
         UpdateLevelScroll(0);
     }
 
@@ -380,12 +400,7 @@ public class LevelEditor : MonoBehaviour
 
     void UpdateLevelScroll(float f)
     {
-        if (f == 0)
-        {
-            f = .0001f;
-            //tiny offset to make sure commands at time 0 are present
-        }
-        EditorTime = f * LevelDuration;
+        EditorTime = Mathf.Clamp(f, .001f, .999f) * LevelDuration; //tiny offset to make sure commands at time 0 are present
 
         //when scrolling forward, we can just simulate the camera position from the current time to the new time
         //when scrolling backwards, we have to simulate the camera position from the start of the level to the new position
@@ -406,6 +421,8 @@ public class LevelEditor : MonoBehaviour
                 }
             }
         }
+
+        UpdateUILines();
 
         void UpdateObject(SpawnedObjectContainer ob)
         {
@@ -435,6 +452,7 @@ public class LevelEditor : MonoBehaviour
                 {
 
                 }
+                ob.obj.transform.position = GlobalTools.PixelSnap(ob.obj.transform.position);
             }
             else
             {
@@ -590,11 +608,78 @@ public class LevelEditor : MonoBehaviour
             }
         }
     }
+    void UpdateWindowShape()
+    {
+        if (WindowResizeStage == 0)
+        {
+            //bottom left, top left, top right, bottom right
+            Vector3[] CurrentCorners = new Vector3[4];
+            ShowLevelFrame.GetWorldCorners(CurrentCorners);
+            float ratio = LevelWidth / ScreenHeight;
+            Vector2 FrameOffsets = new Vector2((CurrentCorners[2].x - CurrentCorners[0].x), (CurrentCorners[2].y - CurrentCorners[0].y));
+
+            Debug.Log($"{ratio}, {FrameOffsets.x / FrameOffsets.y}");
+            if (FrameOffsets.x / FrameOffsets.y > ratio)
+            {
+                cam.orthographicSize *= ScreenHeight / FrameOffsets.y;
+            }
+            else
+            {
+                cam.orthographicSize *= LevelWidth / FrameOffsets.x;
+            }
+            WindowResizeStage++;
+        }
+        else if (WindowResizeStage == 1)
+        {
+            Vector3[] CurrentCorners = new Vector3[4];
+            ShowLevelFrame.GetWorldCorners(CurrentCorners);
+            transform.position -= new Vector3(
+                (CurrentCorners[2].x + CurrentCorners[0].x) / 2,
+                (CurrentCorners[2].y + CurrentCorners[0].y) / 2);
+            WindowResizeStage++;
+        }
+    }
+    void UpdateLevelLength()
+    {
+        LevelLength = GetDistanceTraveledAtTime(LevelDuration);
+        levelScroll.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
+    }
 
     float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
     {
         float output = LerpTime * Mathf.Min(StartSpeed, EndSpeed); //area of the square up to the lowest part of the current chunk of the line
         output += LerpTime * Mathf.Abs(StartSpeed - EndSpeed) / 2; //area of the triangle of the change in speed
         return output;
+    }
+
+    void UpdateUILines()
+    {
+        foreach (SpawnedObjectContainer container in SpawnedObjects)
+        {
+            UpdateUILine(container, new Vector3(0, container.TriggerPosition - ScrollPosition));
+
+            if (container.SpawnerChildren != null)
+            {
+                foreach (SpawnedObjectContainer childContainer in container.SpawnerChildren)
+                {
+                    UpdateUILine(childContainer, container.obj.transform.position);
+                }
+            }
+        }
+        void UpdateUILine(SpawnedObjectContainer container, Vector3 target)
+        {
+            if (container.line)
+            {
+                if (UIShowSpawnLines.isOn && container.obj.activeInHierarchy)
+                {
+                    container.line.gameObject.SetActive(true);
+                    container.line.UpdateLine(container.obj.transform.position, target);
+                }
+                else
+                {
+                    container.line.gameObject.SetActive(false);
+                }
+            }
+        }
     }
 }

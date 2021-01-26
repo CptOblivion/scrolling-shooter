@@ -37,7 +37,8 @@ public class GlobalTools : MonoBehaviour
         }
         //uiCam = GetComponentInChildren<Camera>();
         levelController = this.GetComponent<LevelController>();
-        displayScaler = canvas_Display.GetComponent<CanvasScaler>();
+        if (canvas_Display)
+            displayScaler = canvas_Display.GetComponent<CanvasScaler>();
 
     }
     void Update()
