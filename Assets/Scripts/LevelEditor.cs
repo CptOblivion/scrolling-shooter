@@ -36,8 +36,7 @@ public class LevelEditor : MonoBehaviour
     float LevelLength;
     float LevelDuration = 0;
 
-    LevelEditorSpawnedCommand HoveredCommand = null;
-    LevelEditorSpawnedCommand SelectedCommand = null;
+    public static LevelEditorSpawnedCommand SelectedCommand = null;
 
     public static readonly float ScreenHeight = 48;
     readonly float LevelWidth = 96;
@@ -132,6 +131,8 @@ public class LevelEditor : MonoBehaviour
                     WindowResizeStage = 0;
                     OldWindowSize = new Vector2(Screen.width, Screen.height);
                 }
+                UpdateWindowShape();
+                /*
                 if (!UpdateWindowShape())
                 {
                     //raycast mouse into scene
@@ -172,6 +173,7 @@ public class LevelEditor : MonoBehaviour
                         }
                     }
                 }
+                */
                 break;
             case States.Testing:
                 break;

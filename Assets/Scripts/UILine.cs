@@ -76,6 +76,7 @@ public class UILine : MonoBehaviour
 
     public void UpdateLine()
     {
+        float depth = LevelEditor.current.transform.position.z + 1;
         float ScaleFactor = transform.GetComponentInParent<Canvas>().transform.lossyScale.x;
         if (OriginObject)
             OriginPosition = OriginObject.position;
@@ -86,12 +87,12 @@ public class UILine : MonoBehaviour
         if (tail)
         {
             vec -= new Vector2(tailLength, 0);
-            tail.transform.position = (Vector2)TargetPosition;
+            tail.transform.position = new Vector3(TargetPosition.x, TargetPosition.y, depth);
             tail.transform.localScale = new Vector3(1, tailLength / ScaleFactor, 1);
         }
         if (vec.magnitude > 0)
         {
-            transform.position = (Vector2)OriginPosition;
+            transform.position = new Vector3(OriginPosition.x, OriginPosition.y, depth);
             transform.rotation = Quaternion.LookRotation(vec, Vector3.forward);
             transform.Rotate(new Vector3(90, 0,0), Space.Self);
         }

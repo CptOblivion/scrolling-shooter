@@ -2,8 +2,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
-public class LevelEditorSpawnedCommand : MonoBehaviour
+public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     public class SpawnedObjectContainer
     {
@@ -92,6 +93,24 @@ public class LevelEditorSpawnedCommand : MonoBehaviour
         }
     }
 
-
     public SpawnedObjectContainer command;
+
+    private void Awake()
+    {
+        foreach(Transform child in transform.GetComponentsInChildren<Transform>())
+        {
+            child.gameObject.layer = 5;
+        }
+    }
+
+    public void OnPointerEnter(PointerEventData data)
+    {
+        command.HoverEnter();
+    }
+    public void OnPointerExit(PointerEventData data)
+    {
+        command.HoverExit();
+    }
+
+
 }
