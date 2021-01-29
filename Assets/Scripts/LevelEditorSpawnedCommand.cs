@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     public class SpawnedObjectContainer
     {
@@ -21,6 +21,8 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public SpawnedObjectContainer[] SpawnerChildren;
         public UILine line = null;
         public Color baseColor;
+        public bool Hovered { get; private set; } = false;
+        public bool Selected { get; private set; } = false;
 
         public SpawnedObjectContainer(GameObject gameObject, int commandIndex, Vector3 startPosition, float triggerTime, float triggerPos)
         {
@@ -44,52 +46,66 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public void HoverEnter()
         {
-            if (line)
+            if (!Selected)
             {
-                line.SetColor(LevelEditor.current.CommandLineSelectedColor);
-                line.SetWidth(LevelEditor.current.UILineHoveredWidth);
-                line.transform.SetAsLastSibling();
-            }
-            if (SpawnerChildren != null)
-            {
-                foreach (SpawnedObjectContainer child in SpawnerChildren)
+                if (line)
                 {
-                    if (child.line)
+                    line.SetColor(LevelEditor.current.CommandLineSelectedColor);
+                    line.SetWidth(LevelEditor.current.UILineHoveredWidth);
+                    line.transform.SetAsLastSibling();
+                }
+                if (SpawnerChildren != null)
+                {
+                    foreach (SpawnedObjectContainer child in SpawnerChildren)
                     {
-                        child.line.SetColor(LevelEditor.current.CommandLineSelectedColor);
-                        child.line.SetWidth(LevelEditor.current.UILineHoveredWidth);
-                        child.line.transform.SetAsLastSibling();
+                        if (child.line)
+                        {
+                            child.line.SetColor(LevelEditor.current.CommandLineSelectedColor);
+                            child.line.SetWidth(LevelEditor.current.UILineHoveredWidth);
+                            child.line.transform.SetAsLastSibling();
+                        }
                     }
                 }
             }
-    }
+        }
         public void HoverExit()
         {
-            if (line)
+            if (!Selected)
             {
-                line.SetColor(baseColor);
-                line.SetWidth(LevelEditor.current.UILineWidth);
-            }
-            if (SpawnerChildren != null)
-            {
-                foreach (SpawnedObjectContainer child in SpawnerChildren)
+                if (line)
                 {
-                    if (child.line)
+                    line.SetColor(baseColor);
+                    line.SetWidth(LevelEditor.current.UILineWidth);
+                }
+                if (SpawnerChildren != null)
+                {
+                    foreach (SpawnedObjectContainer child in SpawnerChildren)
                     {
-                        child.line.SetColor(child.baseColor);
-                        child.line.SetWidth(LevelEditor.current.UILineWidth);
+                        if (child.line)
+                        {
+                            child.line.SetColor(child.baseColor);
+                            child.line.SetWidth(LevelEditor.current.UILineWidth);
+                        }
                     }
                 }
             }
         }
 
-        public void Selected()
+        public void Select()
         {
-
+            Selected = true;
+            if (!Hovered)
+                HoverEnter();
         }
-        public void Deselected()
+        public void Deselect()
         {
-
+            Selected = false;
+            if (!Hovered)
+                HoverExit();
+            if (line)
+            {
+                line.SetActive(line.gameObject.activeInHierarchy);
+            }
         }
     }
 
@@ -105,12 +121,36 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
     public void OnPointerEnter(PointerEventData data)
     {
-        command.HoverEnter();
+        HoverEnter();
     }
     public void OnPointerExit(PointerEventData data)
+    {
+        HoverExit();
+    }
+
+    public void OnPointerClick(PointerEventData data)
+    {
+        LevelEditor.SelectCommand(this);
+    }
+
+
+    public void HoverEnter()
+    {
+        command.HoverEnter();
+    }
+    public void HoverExit()
     {
         command.HoverExit();
     }
 
+    public void Select()
+    {
+        command.Select();
+    }
+
+    public void Deselect()
+    {
+        command.Deselect();
+    }
 
 }

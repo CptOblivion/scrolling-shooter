@@ -12,7 +12,7 @@ public class UILine : MonoBehaviour
     float LineWidth;
     public RawImage image;
 
-    RawImage tail;
+    public RawImage tail;
     float tailLength = 0;
     public static UILine NewLine(Vector3 start, Vector3 end, float width, RectTransform parent)
     {
@@ -127,10 +127,10 @@ public class UILine : MonoBehaviour
         UpdateLine();
     }
 
-    public void SetActive(bool active)
+    public void SetActive(bool active, bool CommandSelected = false)
     {
         gameObject.SetActive(active);
         if (tail)
-            tail.gameObject.SetActive(active);
+            tail.gameObject.SetActive(active||CommandSelected);
     }
 }

@@ -8,6 +8,7 @@ using UnityEngine.InputSystem;
 public class LevelEditor : MonoBehaviour
 {
     public Text scrollTimeReadout;
+    public Text activeSelectionName;
 
     class ScrollSpeedChange
     {
@@ -36,7 +37,9 @@ public class LevelEditor : MonoBehaviour
     float LevelLength;
     float LevelDuration = 0;
 
-    public static LevelEditorSpawnedCommand SelectedCommand = null;
+
+    public static LevelEditorSpawnedCommand ActiveCommand = null;
+    public static readonly List<LevelEditorSpawnedCommand> SelectedCommands = new List<LevelEditorSpawnedCommand>();
 
     public static readonly float ScreenHeight = 48;
     readonly float LevelWidth = 96;
@@ -132,48 +135,6 @@ public class LevelEditor : MonoBehaviour
                     OldWindowSize = new Vector2(Screen.width, Screen.height);
                 }
                 UpdateWindowShape();
-                /*
-                if (!UpdateWindowShape())
-                {
-                    //raycast mouse into scene
-                    RaycastHit2D hit = Physics2D.Raycast(cam.ScreenToWorldPoint(mousePos.ReadValue<Vector2>()), Vector2.zero);
-                    if (hit.collider != null)
-                    {
-                        LevelEditorSpawnedCommand com = hit.collider.GetComponent<LevelEditorSpawnedCommand>();
-                        if (com)
-                        {
-                            if (com != HoveredCommand)
-                            {
-                                if (HoveredCommand)
-                                    HoveredCommand.command.HoverExit();
-                                com.command.HoverEnter();
-                                HoveredCommand = com;
-                            }
-                            if (leftClick.triggered)
-                            {
-                                Debug.Log(hit.collider, hit.collider.gameObject);
-                                //set as active command
-                            }
-                        }
-                        else
-                        {
-                            if (HoveredCommand)
-                            {
-                                HoveredCommand.command.HoverExit();
-                                HoveredCommand = null;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (HoveredCommand)
-                        {
-                            HoveredCommand.command.HoverExit();
-                            HoveredCommand = null;
-                        }
-                    }
-                }
-                */
                 break;
             case States.Testing:
                 break;
@@ -246,6 +207,7 @@ public class LevelEditor : MonoBehaviour
                     newOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
                     newSpawn.line = UILine.NewLine(UILineWidth, UILinesLayer);
                     newSpawn.line.SetTail(TailLength);
+                    //TODO: add a component to tail that gets activated when the command is selected, allowing us to move the tail in the timeline (adjusting the spawn time/position of the command)
                     newSpawn.baseColor = CommandLineColor;
 
                     int multiples = 0;
@@ -377,7 +339,7 @@ public class LevelEditor : MonoBehaviour
                         }
                     }
 
-                    newSpawn.Deselected();
+                    newSpawn.Deselect();
                     newSpawn.HoverExit();
 
                     void DetermineLifespan(LevelEditorSpawnedCommand.SpawnedObjectContainer container, float time)
@@ -436,6 +398,37 @@ public class LevelEditor : MonoBehaviour
     void SelectLevel()
     {
         //TODO: popup to select existing file or create new
+    }
+
+    public static void SelectCommand(LevelEditorSpawnedCommand commandOb)
+    {
+        if (commandOb == null)
+        {
+            ClearCommandSelection();
+            return;
+        }
+        if (ActiveCommand && ActiveCommand.command != commandOb.command)
+        {
+            ActiveCommand.Deselect();
+        }
+        ActiveCommand = commandOb;
+        ActiveCommand.Select();
+        current.activeSelectionName.text = $"Ob: {commandOb.command.obj.name} \n Line {commandOb.command.CommandIndex}";
+        //TODO: f we're holding shift or ctrl and there's currently an active selected command, add commandOb to selectedCommands
+    }
+    public static void ClearCommandSelection()
+    {
+        if (ActiveCommand != null)
+        {
+            ActiveCommand.Deselect();
+            ActiveCommand = null;
+        }
+        foreach (LevelEditorSpawnedCommand command in SelectedCommands)
+        {
+            command.Deselect();
+        }
+        SelectedCommands.Clear();
+        current.activeSelectionName.text = "";
     }
 
     void UpdateLevelScroll(float f)
@@ -721,10 +714,25 @@ public class LevelEditor : MonoBehaviour
         {
             if (container.line)
             {
-                if (UIShowSpawnLines.isOn && container.obj.activeInHierarchy)
+                if (UIShowSpawnLines.isOn)
                 {
-                    container.line.SetActive(true);
-                    container.line.UpdateLine(container.obj.transform.position, target);
+                    if (container.obj.activeInHierarchy)
+                    {
+                        container.line.SetActive(true);
+                        container.line.UpdateLine(container.obj.transform.position, target);
+                    }
+                    else
+                    {
+                        if (container.Selected)
+                        {
+                            container.line.UpdateLine();
+                            container.line.SetActive(false, true);
+                        }
+                        else
+                        {
+                            container.line.SetActive(false);
+                        }
+                    }
                 }
                 else
                 {
