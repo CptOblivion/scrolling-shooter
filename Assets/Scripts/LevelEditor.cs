@@ -26,7 +26,7 @@ public class LevelEditor : MonoBehaviour
     public InputActionAsset actionMapUI;
     InputAction mousePos;
     InputAction leftClick;
-    readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
+    static readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
 
     enum States {NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
@@ -34,8 +34,8 @@ public class LevelEditor : MonoBehaviour
     public RectTransform UILinesLayer;
     public TextAsset Level;
     public Scrollbar levelScroll;
-    float LevelLength;
-    float LevelDuration = 0;
+    public static float LevelLength;
+    public static float LevelDuration = 0;
 
 
     public static LevelEditorSpawnedCommand ActiveCommand = null;
@@ -207,6 +207,12 @@ public class LevelEditor : MonoBehaviour
                     newOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
                     newSpawn.line = UILine.NewLine(UILineWidth, UILinesLayer);
                     newSpawn.line.SetTail(TailLength);
+                    newSpawn.ControlSpawnTime = newSpawn.line.tail.gameObject.AddComponent<LevelEditorCommandDragControl>();
+                    newSpawn.ControlSpawnTime.DragAxis = LevelEditorCommandDragControl.Axes.Y;
+                    newSpawn.ControlSpawnTime.ControlInput = LevelEditorCommandDragControl.ControlInputs.SpawnTime;
+                    newSpawn.ControlSpawnTime.command = newSpawn;
+                    newSpawn.ControlSpawnTime.SetActive(false);
+
                     //TODO: add a component to tail that gets activated when the command is selected, allowing us to move the tail in the timeline (adjusting the spawn time/position of the command)
                     newSpawn.baseColor = CommandLineColor;
 
@@ -243,7 +249,7 @@ public class LevelEditor : MonoBehaviour
                         }
                     }
 
-                    DetermineLifespan(newSpawn, TempTime);
+                    DetermineCommandLifespan(newSpawn);
 
                     Spawner spawner = newOb.GetComponent<Spawner>();
                     if (spawner)
@@ -281,7 +287,9 @@ public class LevelEditor : MonoBehaviour
                             LevelEditorSpawnedCommand.SpawnedObjectContainer newChild = new LevelEditorSpawnedCommand.SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
 
                             tempSpawnerChildren.Add(newChild);
-                            DetermineLifespan(newChild, SpawnerTimer + TempTime);
+
+                            newChild.TriggerOffsetTime = SpawnerTimer;
+                            DetermineCommandLifespan(newChild);
                             newChild.line = UILine.NewLine(UILineWidth, UILinesLayer);
                             newChild.baseColor =SpawnerChildLineColor;
 
@@ -305,9 +313,6 @@ public class LevelEditor : MonoBehaviour
                         }
 
                         newSpawn.SpawnerChildren = tempSpawnerChildren.ToArray();
-
-                        //TODO: simulate spawner over the course of its life, populate those items into a list, store in newSpawn.spawnerChildren
-                        // also properly add children to SpawnedObjects
                         //spawners may not use the multiples command
                     }
                     else if (multiples > 0)
@@ -329,46 +334,20 @@ public class LevelEditor : MonoBehaviour
 
                             child.GetComponent<LevelEditorSpawnedCommand>().command = newSpawn; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
 
-                            float childTime = TempTime + (multipleDelay * i);
-                            LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, childTime, GetDistanceTraveledAtTime(childTime));
+                            float childTime = (multipleDelay * i);
+                            LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, TempTime + childTime, GetDistanceTraveledAtTime(childTime));
                             
                             newSpawn.SpawnerChildren[i - 1] = childContainer;
+
+                            childContainer.TriggerOffsetTime = childTime;
                             childContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
                             childContainer.baseColor = MultipleChildLineColor;
-                            DetermineLifespan(childContainer, childTime);
+                            DetermineCommandLifespan(childContainer);
                         }
                     }
 
                     newSpawn.Deselect();
                     newSpawn.HoverExit();
-
-                    void DetermineLifespan(LevelEditorSpawnedCommand.SpawnedObjectContainer container, float time)
-                    {
-                        ParallaxScroll parallax = container.obj.GetComponent<ParallaxScroll>();
-                        Animation anim = container.obj.GetComponent<Animation>();
-                        if (parallax)
-                        {
-                            container.parallaxScroll = true;
-                            float TopEdge = 0;
-                            foreach (Renderer renderer in container.obj.GetComponentsInChildren<Renderer>())
-                            {
-                                if (renderer.bounds.max.y > TopEdge) TopEdge = renderer.bounds.max.y;
-                            }
-                            float TravelDistance = ParallaxScroll.DetermineLife(TopEdge, container.obj.transform.position.z);
-                            container.Life = GetTimeFromDistanceTraveled(TravelDistance, container.TriggerTime);
-                        }
-                        else if (anim)
-                        {
-                            container.Life = anim.clip.length;
-                            container.anim = anim;
-                        }
-                        //TODO: calculate lifespan for path
-
-                        else
-                        {
-                            container.Life = LevelDuration - container.TriggerTime;
-                        }
-                    }
 
                     break;
 
@@ -388,11 +367,41 @@ public class LevelEditor : MonoBehaviour
 
             }
         }
-        //load prefabs
-        //run through each line, place in scene
-        //update levelLength as we go
         UpdateLevelLength();
         UpdateLevelScroll(0);
+    }
+
+    public static void DetermineCommandLifespan(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    {
+        ParallaxScroll parallax = container.obj.GetComponent<ParallaxScroll>();
+        Animation anim = container.obj.GetComponent<Animation>();
+        if (parallax)
+        {
+            container.parallaxScroll = true;
+
+            //TODO: there's gotta be a more elegant way to do this than to reset the position, calculate the bounds, then re-un-de-reset the position
+            Vector3 TempPosition = container.obj.transform.position;
+            container.obj.transform.position = container.StartPosition;
+            float TopEdge = 0;
+            foreach (Renderer renderer in container.obj.GetComponentsInChildren<Renderer>())
+            {
+                if (renderer.bounds.max.y > TopEdge) TopEdge = renderer.bounds.max.y;
+            }
+            container.obj.transform.position = TempPosition;
+            float TravelDistance = ParallaxScroll.DetermineLife(TopEdge, container.StartPosition.z);
+            container.Life = GetTimeFromDistanceTraveled(TravelDistance, container.TriggerTime);
+        }
+        else if (anim)
+        {
+            container.Life = anim.clip.length;
+            container.anim = anim;
+        }
+        //TODO: calculate lifespan for path
+
+        else
+        {
+            container.Life = LevelDuration - container.TriggerTime;
+        }
     }
 
     void SelectLevel()
@@ -431,7 +440,16 @@ public class LevelEditor : MonoBehaviour
         current.activeSelectionName.text = "";
     }
 
+    public static void UpdateCommand(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    {
+        current.UpdateLevelScroll(EditorTime / LevelDuration, container);
+    }
+
     void UpdateLevelScroll(float f)
+    {
+        UpdateLevelScroll(f, null);
+    }
+    void UpdateLevelScroll(float f, LevelEditorSpawnedCommand.SpawnedObjectContainer individualContainer)
     {
         EditorTime = Mathf.Clamp(f, .001f, .999f) * LevelDuration; //tiny offset to make sure commands at time 0 are present
 
@@ -443,58 +461,72 @@ public class LevelEditor : MonoBehaviour
         float DistanceSinceTrigger;
         float TimeSinceTrigger;
 
-        foreach(LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedOb in SpawnedObjects)
+        if (individualContainer != null)
         {
-            UpdateObject(spawnedOb);
-            if (spawnedOb.SpawnerChildren != null)
+            UpdateContainer(individualContainer);
+            UpdateUILine(individualContainer);
+        }
+        else
+        {
+            foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedOb in SpawnedObjects)
             {
-                foreach(LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObChild in spawnedOb.SpawnerChildren)
+                UpdateContainer(spawnedOb);
+            }
+            UpdateUILines();
+        }
+
+
+        void UpdateContainer(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+        {
+
+            UpdateSubcontainer(container);
+            if (container.SpawnerChildren != null)
+            {
+                foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObChild in container.SpawnerChildren)
                 {
-                    UpdateObject(spawnedObChild);
+                    UpdateSubcontainer(spawnedObChild);
                 }
             }
         }
 
-        UpdateUILines();
-
-        void UpdateObject(LevelEditorSpawnedCommand.SpawnedObjectContainer ob)
+        void UpdateSubcontainer(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
         {
 
-            DistanceSinceTrigger = ScrollPosition - ob.TriggerPosition;
-            TimeSinceTrigger = EditorTime - ob.TriggerTime;
+            DistanceSinceTrigger = ScrollPosition - container.TriggerPosition;
+            TimeSinceTrigger = EditorTime - container.TriggerTime;
             float LifeEnd = LevelLength;
-            if (ob.Life > 0)
+            if (container.Life > 0)
             {
-                LifeEnd = ob.TriggerTime + ob.Life;
+                LifeEnd = container.TriggerTime + container.Life;
             }
-            if (ob.TriggerTime < EditorTime && LifeEnd > EditorTime)
+            if (container.TriggerTime < EditorTime && LifeEnd > EditorTime)
             {
-                ob.obj.SetActive(true);
-                if (ob.parallaxScroll)
+                container.obj.SetActive(true);
+                if (container.parallaxScroll)
                 {
-                    ob.obj.transform.position = ParallaxScroll.ScrollAbsolute(ob.StartPosition, DistanceSinceTrigger);
+                    container.obj.transform.position = ParallaxScroll.ScrollAbsolute(container.StartPosition, DistanceSinceTrigger);
                 }
-                else if (ob.anim)
+                else if (container.anim)
                 {
-                    ob.anim.Play();
-                    ob.anim[ob.anim.clip.name].time = TimeSinceTrigger;
-                    ob.anim.Sample();
-                    ob.anim.Stop();
+                    container.anim.Play();
+                    container.anim[container.anim.clip.name].time = TimeSinceTrigger;
+                    container.anim.Sample();
+                    container.anim.Stop();
                 }
-                else if (ob.path)
+                else if (container.path)
                 {
-
+                    //TODO: implement
                 }
-                ob.obj.transform.position = GlobalTools.PixelSnap(ob.obj.transform.position);
+                container.obj.transform.position = GlobalTools.PixelSnap(container.obj.transform.position);
             }
             else
             {
-                ob.obj.SetActive(false);
+                container.obj.SetActive(false);
             }
         }
     }
 
-    float GetDistanceTraveledAtTime(float TargetTime)
+    public static float GetDistanceTraveledAtTime(float TargetTime)
     {
         float currentTime = 0;
         float distance = 0;
@@ -502,31 +534,31 @@ public class LevelEditor : MonoBehaviour
 
         for (int i = 0; i < ScrollSpeedCache.Count; i++)
         {
-            ScrollSpeedChange current = ScrollSpeedCache[i];
+            ScrollSpeedChange currentStep = ScrollSpeedCache[i];
 
-            if (current.Time >= TargetTime)
+            if (currentStep.Time >= TargetTime)
             {
                 return distance + (TargetTime - currentTime) * speed;
             }
-            distance += (current.Time - currentTime) * speed;
+            distance += (currentStep.Time - currentTime) * speed;
 
-            currentTime = current.Time;
-            if (TargetTime < currentTime + current.LerpTime)
+            currentTime = currentStep.Time;
+            if (TargetTime < currentTime + currentStep.LerpTime)
             {
                 float NewLerpTime = TargetTime - currentTime;
-                distance += AreaUnderLerp(speed, Mathf.Lerp(speed, current.NewSpeed, NewLerpTime/current.LerpTime), NewLerpTime);
+                distance += AreaUnderLerp(speed, Mathf.Lerp(speed, currentStep.NewSpeed, NewLerpTime/currentStep.LerpTime), NewLerpTime);
                 return distance;
             }
-            distance += AreaUnderLerp(speed, current.NewSpeed, current.LerpTime);
-            speed = current.NewSpeed;
+            distance += AreaUnderLerp(speed, currentStep.NewSpeed, currentStep.LerpTime);
+            speed = currentStep.NewSpeed;
 
-            currentTime += current.LerpTime;
+            currentTime += currentStep.LerpTime;
         }
 
         return distance + (TargetTime - currentTime) * speed;
     }
 
-    float GetTimeFromDistanceTraveled(float TargetDistance, float StartTime)
+    static float GetTimeFromDistanceTraveled(float TargetDistance, float StartTime)
     {
         float CurrentTime = StartTime;
         float CurrentDistance = 0;
@@ -688,7 +720,7 @@ public class LevelEditor : MonoBehaviour
         levelScroll.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
     }
 
-    float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
+    static float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
     {
         float output = LerpTime * Mathf.Min(StartSpeed, EndSpeed); //area of the square up to the lowest part of the current chunk of the line
         output += LerpTime * Mathf.Abs(StartSpeed - EndSpeed) / 2; //area of the triangle of the change in speed
@@ -699,22 +731,29 @@ public class LevelEditor : MonoBehaviour
     {
         foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer container in SpawnedObjects)
         {
-            float VertPos = (container.TriggerTime / LevelDuration * (1-levelScroll.size) + levelScroll.size/2) * ScreenHeight - ScreenHeight / 2;
-            UpdateUILine(container, new Vector3(LevelWidth/2, VertPos));
+            UpdateUILine(container);
+        }
+        
+    }
 
-            if (container.SpawnerChildren != null)
+    void UpdateUILine(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    {
+        float VertPos = (container.TriggerTime / LevelDuration * (1 - levelScroll.size) + levelScroll.size / 2) * ScreenHeight - ScreenHeight / 2;
+        UpdateUISubLine(container, new Vector3(LevelWidth / 2, VertPos));
+
+        if (container.SpawnerChildren != null)
+        {
+            foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in container.SpawnerChildren)
             {
-                foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in container.SpawnerChildren)
-                {
-                    UpdateUILine(childContainer, container.obj.transform.position);
-                }
+                UpdateUISubLine(childContainer, container.obj.transform.position);
             }
         }
-        void UpdateUILine(LevelEditorSpawnedCommand.SpawnedObjectContainer container, Vector3 target)
+
+        void UpdateUISubLine(LevelEditorSpawnedCommand.SpawnedObjectContainer container, Vector3 target)
         {
             if (container.line)
             {
-                if (UIShowSpawnLines.isOn)
+                if (current.UIShowSpawnLines.isOn)
                 {
                     if (container.obj.activeInHierarchy)
                     {
@@ -725,7 +764,7 @@ public class LevelEditor : MonoBehaviour
                     {
                         if (container.Selected)
                         {
-                            container.line.UpdateLine();
+                            container.line.UpdateLine(container.obj.transform.position, target);
                             container.line.SetActive(false, true);
                         }
                         else
@@ -741,6 +780,7 @@ public class LevelEditor : MonoBehaviour
             }
         }
     }
+
     void UpdateUILines(bool b)
     {
         UpdateUILines();

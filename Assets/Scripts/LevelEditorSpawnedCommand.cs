@@ -12,6 +12,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public Vector3 StartPosition;
         public float TriggerTime;
         public float TriggerPosition;
+        public float TriggerOffsetTime = 0;
         public float Life;
         public Animation anim = null;
         public EnemyPath path = null;
@@ -21,6 +22,8 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public SpawnedObjectContainer[] SpawnerChildren;
         public UILine line = null;
         public Color baseColor;
+        public LevelEditorCommandDragControl ControlSpawnTime = null;
+        public LevelEditorCommandDragControl ControlSpawnLocation = null;
         public bool Hovered { get; private set; } = false;
         public bool Selected { get; private set; } = false;
 
@@ -53,6 +56,8 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                     line.SetColor(LevelEditor.current.CommandLineSelectedColor);
                     line.SetWidth(LevelEditor.current.UILineHoveredWidth);
                     line.transform.SetAsLastSibling();
+                    if (line.tail)
+                        line.tail.transform.SetAsLastSibling();
                 }
                 if (SpawnerChildren != null)
                 {
@@ -63,6 +68,8 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                             child.line.SetColor(LevelEditor.current.CommandLineSelectedColor);
                             child.line.SetWidth(LevelEditor.current.UILineHoveredWidth);
                             child.line.transform.SetAsLastSibling();
+                            if (child.line.tail)
+                                child.line.tail.transform.SetAsLastSibling();
                         }
                     }
                 }
@@ -94,12 +101,20 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public void Select()
         {
             Selected = true;
+            if (ControlSpawnTime)
+            {
+                ControlSpawnTime.SetActive(true);
+            }
             if (!Hovered)
                 HoverEnter();
         }
         public void Deselect()
         {
             Selected = false;
+            if (ControlSpawnTime)
+            {
+                ControlSpawnTime.SetActive(false);
+            }
             if (!Hovered)
                 HoverExit();
             if (line)
