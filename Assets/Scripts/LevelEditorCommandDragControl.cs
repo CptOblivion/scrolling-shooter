@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class LevelEditorCommandDragControl : MonoBehaviour, IPointerDownHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public enum Axes { X, Y, XY}
     public enum ControlInputs { SpawnTime, SpawnLocation}
@@ -11,9 +11,7 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
     new public Collider2D collider;
     public Axes DragAxis = Axes.Y;
     public ControlInputs ControlInput = ControlInputs.SpawnTime;
-    Vector3 OldLocation = Vector2.zero;
-    Vector2 TotalDelta = Vector2.zero;
-    public LevelEditorSpawnedCommand.SpawnedObjectContainer command = null;
+    public LevelEditorSpawnedCommand.CommandContainer command = null;
     private void Awake()
     {
         collider = gameObject.AddComponent<BoxCollider2D>();
@@ -25,71 +23,37 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
         collider.enabled = active;
     }
 
+    public void OnPointerDown(PointerEventData data)
+    {
+        command.PointerDown(data);
+    }
     public void OnBeginDrag(PointerEventData data)
     {
-        TotalDelta = Vector2.zero;
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:
-                OldLocation = new Vector2(0, command.TriggerTime);
+                command.BeginDragTimeline(data);
                 break;
             case ControlInputs.SpawnLocation:
-                OldLocation = command.StartPosition;
+                ((LevelEditorSpawnedCommand.LevelPositionalContainer)command).BeginDragPosition(data);
                 break;
         }
     }
     public void OnDrag(PointerEventData data)
     {
+        //TODO: maybe call a function in LevelEditorSpawnedCommand.CommandContainer and pass along data, so we can override it for different command types
         //TODO: abort drag (reset to OldLocation, don't save undo state) if esc or right mouse is hit
         //TODO: pass along data to OnDrag for all selected commands (drag as group)
 
-        //scale delta to be relative to game window viewport
-        TotalDelta += data.delta;
+        //TODO: scale delta to be relative to game window viewport/level duration
+
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:
-                //TODO: scale delta to match life time of level
-                float TempDragScale = 0.1f;
-                float PositionY = OldLocation.y + TotalDelta.y * TempDragScale;
-
-                //TODO: this should probably all go into a function
-                //TODO: account for holds in timeline
-                command.TriggerTime = Mathf.Clamp(command.TriggerTime+data.delta.y*TempDragScale, 0, LevelEditor.LevelDuration);
-                foreach(float f in LevelEditor.LevelBreaks)
-                {
-                    if (PositionY > f && PositionY < f + LevelEditor.LevelHoldDelay)
-                    {
-                        if (PositionY < f + LevelEditor.LevelHoldDelay / 2)
-                        {
-                            command.TriggerTime = f;
-                        }
-                        else
-                        {
-                            command.TriggerTime = f + LevelEditor.LevelHoldDelay;
-                        }
-                        break;
-                    }
-                }
-                command.TriggerPosition = LevelEditor.GetDistanceTraveledAtTime(command.TriggerTime);
-                
-                LevelEditor.DetermineCommandLifespan(command);
-
-                if (command.SpawnerChildren != null)
-                {
-                    foreach(LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in command.SpawnerChildren)
-                    {
-                        childContainer.TriggerTime = command.TriggerTime + childContainer.TriggerOffsetTime;
-                        childContainer.TriggerPosition = LevelEditor.GetDistanceTraveledAtTime(childContainer.TriggerTime);
-                        LevelEditor.DetermineCommandLifespan(childContainer);
-                    }
-                }
-                LevelEditor.UpdateCommand(command);
+                command.DragTimeline(data);
                 break;
             case ControlInputs.SpawnLocation:
-                //filter X or Y depending on animation/path (if neither, XY)
-                //change origin location
-                //clamp to screen? (Or indicate offscreen somehow)
-                //update object
+                ((LevelEditorSpawnedCommand.LevelPositionalContainer)command).DragPosition(data);
                 break;
         }
     }
@@ -99,8 +63,10 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:
+                command.EndDragTimeline(data);
                 break;
             case ControlInputs.SpawnLocation:
+                ((LevelEditorSpawnedCommand.LevelPositionalContainer)command).EndDragPosition(data);
                 break;
         }
     }

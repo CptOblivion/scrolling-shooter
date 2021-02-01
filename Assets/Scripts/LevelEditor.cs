@@ -28,17 +28,16 @@ public class LevelEditor : MonoBehaviour
     InputAction leftClick;
     static readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
 
-    public static readonly List<float> LevelBreaks = new List<float>();
-
     enum States {NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
 
     public RectTransform UILinesLayer;
     public TextAsset Level;
     public Scrollbar levelScroll;
+    public RectTransform commandsTrack;
     public static float LevelLength;
+    public static float LevelDurationEditor = 0;
     public static float LevelDuration = 0;
-
 
     public static LevelEditorSpawnedCommand ActiveCommand = null;
     public static readonly List<LevelEditorSpawnedCommand> SelectedCommands = new List<LevelEditorSpawnedCommand>();
@@ -69,9 +68,11 @@ public class LevelEditor : MonoBehaviour
 
     States state = States.NoLevel;
 
-    public static readonly float LevelHoldDelay = 5;
+    public static readonly float EditorHoldDelay = 5;
 
-    readonly List<LevelEditorSpawnedCommand.SpawnedObjectContainer> SpawnedObjects = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
+    public static readonly List<LevelEditorSpawnedCommand.SpawnedObjectContainer> SpawnedObjects = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
+    public static readonly List<LevelEditorSpawnedCommand.LevelHoldContainer> LevelHolds = new List<LevelEditorSpawnedCommand.LevelHoldContainer>();
+    public static readonly List<LevelEditorSpawnedCommand.ScrollSpeedContainer> ScrollSpeeds = new List<LevelEditorSpawnedCommand.ScrollSpeedContainer>();
     void Awake()
     {
         current = this;
@@ -150,23 +151,26 @@ public class LevelEditor : MonoBehaviour
         float TempPosition=0;
         float TempTime = 0;
         float TempHoldTime = 0;
+        float deltaTimestamp;
 
-        BuildScrollSpeedCache();
+        BuildScrollSpeedCacheFirstPass();
 
         for (int CurrentCommandIndex = 0; CurrentCommandIndex < LevelParsed.Count; CurrentCommandIndex++)
         {
             LevelParser.LevelLine line = LevelParsed[CurrentCommandIndex];
 
-            float newTime = line.Time;
+            deltaTimestamp = line.Time;
+
             if (!line.RelativePosition)
             {
-                newTime -= TempTime-TempHoldTime;
+                //convert absolute to delta
+                deltaTimestamp -= TempTime-TempHoldTime;
             }
-            if (newTime != 0) //no need to update position if we haven't changed time since the last command
+            if (deltaTimestamp != 0) //no need to update position if we haven't changed time since the last command
             {
-                TempPosition = GetDistanceTraveledAtTime(TempTime+newTime);
+                TempPosition = GetDistanceTraveledAtTime(TempTime+deltaTimestamp);
             }
-            TempTime += newTime;
+            TempTime += deltaTimestamp;
 
             if (TempPosition > LevelLength)
             {
@@ -191,8 +195,20 @@ public class LevelEditor : MonoBehaviour
                     }
                     if (add)
                     {
-                        TempHoldTime += LevelHoldDelay;
-                        TempTime += LevelHoldDelay;
+                        GameObject newHoldOb = new GameObject();
+                        newHoldOb.transform.SetParent(commandsTrack, false);
+                        RectTransform t = newHoldOb.AddComponent<RectTransform>();
+                        newHoldOb.AddComponent<RawImage>();
+
+                        t.offsetMin = t.offsetMax = Vector2.zero;
+                        t.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
+                        t.anchorMax = new Vector2(1, (TempTime+EditorHoldDelay)/LevelDurationEditor);
+
+                        LevelEditorSpawnedCommand.LevelHoldContainer newCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
+                        LevelHolds.Add(newCommand);
+                        newCommand.AddTimeCollider();
+                        TempHoldTime += EditorHoldDelay;
+                        TempTime += EditorHoldDelay;
                     }
                     break;
                 case LevelParser.AvailableCommands.Spawn:
@@ -201,22 +217,18 @@ public class LevelEditor : MonoBehaviour
                     GetNextArgument();
 
                     Vector3 SpawnPosition = LevelParser.ParseVector3(val);
-                    GameObject newOb = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
+                    GameObject newSpawnedOb = Instantiate(prefabResource.asset as GameObject, SpawnPosition, Quaternion.identity);
 
 
-                    LevelEditorSpawnedCommand.SpawnedObjectContainer newSpawn = new LevelEditorSpawnedCommand.SpawnedObjectContainer(newOb, CurrentCommandIndex, SpawnPosition, TempTime, TempPosition);
-                    SpawnedObjects.Add(newSpawn);
-                    newOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
-                    newSpawn.line = UILine.NewLine(UILineWidth, UILinesLayer);
-                    newSpawn.line.SetTail(TailLength);
-                    newSpawn.ControlSpawnTime = newSpawn.line.tail.gameObject.AddComponent<LevelEditorCommandDragControl>();
-                    newSpawn.ControlSpawnTime.DragAxis = LevelEditorCommandDragControl.Axes.Y;
-                    newSpawn.ControlSpawnTime.ControlInput = LevelEditorCommandDragControl.ControlInputs.SpawnTime;
-                    newSpawn.ControlSpawnTime.command = newSpawn;
-                    newSpawn.ControlSpawnTime.SetActive(false);
+                    LevelEditorSpawnedCommand.SpawnedObjectContainer newContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(newSpawnedOb, CurrentCommandIndex, SpawnPosition, TempTime - TempHoldTime, TempTime, TempPosition);
+                    SpawnedObjects.Add(newContainer);
+                    newSpawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newContainer;
+                    newContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                    newContainer.line.SetTail(TailLength);
+                    newContainer.AddTimeCollider(newContainer.line.tail.gameObject);
+                    newContainer.SliderSpawnTime.SetActive(false);
 
-                    //TODO: add a component to tail that gets activated when the command is selected, allowing us to move the tail in the timeline (adjusting the spawn time/position of the command)
-                    newSpawn.baseColor = CommandLineColor;
+                    newContainer.LineBaseColor = CommandLineColor;
 
                     int multiples = 0;
                     float multipleDelay = 0;
@@ -227,14 +239,14 @@ public class LevelEditor : MonoBehaviour
                         switch (arg)
                         {
                             case "Animation":
-                                GameObject spawnedObParent = new GameObject(newOb.name);
-                                spawnedObParent.transform.position = newOb.transform.position;
-                                newOb.transform.SetParent(spawnedObParent.transform, true);
-                                newSpawn.anim = newOb.GetComponent<Animation>();
+                                GameObject spawnedObParent = new GameObject(newSpawnedOb.name);
+                                spawnedObParent.transform.position = newSpawnedOb.transform.position;
+                                newSpawnedOb.transform.SetParent(spawnedObParent.transform, true);
+                                newContainer.anim = newSpawnedOb.GetComponent<Animation>();
                                 AnimationClip animClip = LoadAssets[val].asset as AnimationClip;
-                                newSpawn.anim.clip = animClip;
-                                newSpawn.anim.AddClip(animClip, animClip.name);
-                                newSpawn.anim.Stop();
+                                newContainer.anim.clip = animClip;
+                                newContainer.anim.AddClip(animClip, animClip.name);
+                                newContainer.anim.Stop();
 
                                 break;
                             case "Path":
@@ -251,9 +263,9 @@ public class LevelEditor : MonoBehaviour
                         }
                     }
 
-                    DetermineCommandLifespan(newSpawn);
+                    DetermineCommandLifespan(newContainer);
 
-                    Spawner spawner = newOb.GetComponent<Spawner>();
+                    Spawner spawner = newSpawnedOb.GetComponent<Spawner>();
                     if (spawner)
                     {
                         List<LevelEditorSpawnedCommand.SpawnedObjectContainer> tempSpawnerChildren = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
@@ -272,7 +284,7 @@ public class LevelEditor : MonoBehaviour
                             SpawnerDistance = GetDistanceTraveledAtTime(SpawnerTimer);
                         }
                         //Debug.Log($"{newSpawn.Life}");
-                        while(SpawnerTimer < newSpawn.Life)
+                        while(SpawnerTimer < newContainer.Life)
                         {
                             //spawn object
                             GameObject spawnedOb;
@@ -283,17 +295,19 @@ public class LevelEditor : MonoBehaviour
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity, spawner.transform);
                             else
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity);
-                            spawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newSpawn;
+                            spawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newContainer;
                             //TODO: handle animation (or just strip that option from the spawner class, that might be better)
 
-                            LevelEditorSpawnedCommand.SpawnedObjectContainer newChild = new LevelEditorSpawnedCommand.SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
+                            LevelEditorSpawnedCommand.SpawnedObjectContainer newChildContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, -1, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
 
-                            tempSpawnerChildren.Add(newChild);
+                            tempSpawnerChildren.Add(newChildContainer);
 
-                            newChild.TriggerOffsetTime = SpawnerTimer;
-                            DetermineCommandLifespan(newChild);
-                            newChild.line = UILine.NewLine(UILineWidth, UILinesLayer);
-                            newChild.baseColor =SpawnerChildLineColor;
+                            newChildContainer.TriggerOffsetTime = SpawnerTimer;
+                            DetermineCommandLifespan(newChildContainer);
+                            newChildContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                            newChildContainer.LineBaseColor =SpawnerChildLineColor;
+                            newChildContainer.SetVisualsIdle();
+
 
                             SpawnerCount--;
                             if (SpawnerCount == 0)
@@ -314,42 +328,43 @@ public class LevelEditor : MonoBehaviour
                             }
                         }
 
-                        newSpawn.SpawnerChildren = tempSpawnerChildren.ToArray();
+                        newContainer.SpawnerChildren = tempSpawnerChildren.ToArray();
                         //spawners may not use the multiples command
                     }
                     else if (multiples > 0)
                     {
-                        newSpawn.SpawnerChildren = new LevelEditorSpawnedCommand.SpawnedObjectContainer[multiples-1];
+                        newContainer.SpawnerChildren = new LevelEditorSpawnedCommand.SpawnedObjectContainer[multiples-1];
                         for(int i = 1; i < multiples; i++)
                         {
                             GameObject child;
-                            if (newSpawn.anim)
+                            if (newContainer.anim)
                             {
-                                child = Instantiate(newOb.transform.parent.gameObject).transform.GetChild(0).gameObject;
+                                child = Instantiate(newSpawnedOb.transform.parent.gameObject).transform.GetChild(0).gameObject;
                                 child.transform.parent.position += new Vector3(0, multipleOffset * i, 0);
                             }
                             else
                             {
-                                child = Instantiate(newOb);
+                                child = Instantiate(newSpawnedOb);
                                 child.transform.position += new Vector3(0, multipleOffset * i, 0);
                             }
 
-                            child.GetComponent<LevelEditorSpawnedCommand>().command = newSpawn; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
+                            child.GetComponent<LevelEditorSpawnedCommand>().command = newContainer; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
 
                             float childTime = (multipleDelay * i);
-                            LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, TempTime + childTime, GetDistanceTraveledAtTime(childTime));
+                            LevelEditorSpawnedCommand.SpawnedObjectContainer newChildContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, -1, TempTime + childTime, GetDistanceTraveledAtTime(childTime));
                             
-                            newSpawn.SpawnerChildren[i - 1] = childContainer;
+                            newContainer.SpawnerChildren[i - 1] = newChildContainer;
 
-                            childContainer.TriggerOffsetTime = childTime;
-                            childContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
-                            childContainer.baseColor = MultipleChildLineColor;
-                            DetermineCommandLifespan(childContainer);
+                            newChildContainer.TriggerOffsetTime = childTime;
+                            newChildContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
+                            newChildContainer.LineBaseColor = MultipleChildLineColor;
+                            newChildContainer.SetVisualsIdle();
+                            DetermineCommandLifespan(newChildContainer);
                         }
                     }
 
-                    newSpawn.Deselect();
-                    newSpawn.HoverExit();
+                    newContainer.Deselect();
+                    newContainer.SetVisualsIdle();
 
                     break;
 
@@ -370,10 +385,16 @@ public class LevelEditor : MonoBehaviour
             }
         }
         UpdateLevelLength();
+
         UpdateLevelScroll(0);
     }
 
-    public static void DetermineCommandLifespan(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    public static void SpawnLevelBreakCommand()
+    {
+        //SpawnedObjects.Add()
+    }
+
+    public static void DetermineCommandLifespan(LevelEditorSpawnedCommand.LevelPositionalContainer container)
     {
         ParallaxScroll parallax = container.obj.GetComponent<ParallaxScroll>();
         Animation anim = container.obj.GetComponent<Animation>();
@@ -391,7 +412,7 @@ public class LevelEditor : MonoBehaviour
             }
             container.obj.transform.position = TempPosition;
             float TravelDistance = ParallaxScroll.DetermineLife(TopEdge, container.StartPosition.z);
-            container.Life = GetTimeFromDistanceTraveled(TravelDistance, container.TriggerTime);
+            container.Life = GetTimeFromDistanceTraveled(TravelDistance, container.EditorTriggerTime);
         }
         else if (anim)
         {
@@ -402,7 +423,7 @@ public class LevelEditor : MonoBehaviour
 
         else
         {
-            container.Life = LevelDuration - container.TriggerTime;
+            container.Life = LevelDurationEditor - container.EditorTriggerTime;
         }
     }
 
@@ -424,7 +445,7 @@ public class LevelEditor : MonoBehaviour
         }
         ActiveCommand = commandOb;
         ActiveCommand.Select();
-        current.activeSelectionName.text = $"Ob: {commandOb.command.obj.name} \n Line {commandOb.command.CommandIndex}";
+        //current.activeSelectionName.text = $"Ob: {commandOb.command.obj.name} \n Line {commandOb.command.CommandIndex}";
         //TODO: f we're holding shift or ctrl and there's currently an active selected command, add commandOb to selectedCommands
     }
     public static void ClearCommandSelection()
@@ -442,18 +463,18 @@ public class LevelEditor : MonoBehaviour
         current.activeSelectionName.text = "";
     }
 
-    public static void UpdateCommand(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    public static void UpdateCommand(LevelEditorSpawnedCommand.LevelPositionalContainer container)
     {
-        current.UpdateLevelScroll(EditorTime / LevelDuration, container);
+        current.UpdateLevelScroll(EditorTime / LevelDurationEditor, container);
     }
 
     void UpdateLevelScroll(float f)
     {
         UpdateLevelScroll(f, null);
     }
-    void UpdateLevelScroll(float f, LevelEditorSpawnedCommand.SpawnedObjectContainer individualContainer)
+    void UpdateLevelScroll(float f, LevelEditorSpawnedCommand.LevelPositionalContainer individualContainer)
     {
-        EditorTime = Mathf.Clamp(f, .001f, .999f) * LevelDuration; //tiny offset to make sure commands at time 0 are present
+        EditorTime = Mathf.Clamp(f, .001f, .999f) * LevelDurationEditor; //tiny offset to make sure commands at time 0 are present
 
         //when scrolling forward, we can just simulate the camera position from the current time to the new time
         //when scrolling backwards, we have to simulate the camera position from the start of the level to the new position
@@ -470,38 +491,45 @@ public class LevelEditor : MonoBehaviour
         }
         else
         {
-            foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedOb in SpawnedObjects)
+            foreach (LevelEditorSpawnedCommand.CommandContainer spawnedContainer in SpawnedObjects)
             {
-                UpdateContainer(spawnedOb);
+                if (spawnedContainer.CommandType == LevelParser.AvailableCommands.Spawn)
+                {
+                    UpdateContainer((LevelEditorSpawnedCommand.SpawnedObjectContainer)spawnedContainer);
+                }
             }
             UpdateUILines();
         }
 
 
-        void UpdateContainer(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+        void UpdateContainer(LevelEditorSpawnedCommand.LevelPositionalContainer container)
         {
 
             UpdateSubcontainer(container);
-            if (container.SpawnerChildren != null)
+            if (container.CommandType == LevelParser.AvailableCommands.Spawn)
             {
-                foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObChild in container.SpawnerChildren)
+                LevelEditorSpawnedCommand.SpawnedObjectContainer spawnContainer = (LevelEditorSpawnedCommand.SpawnedObjectContainer)container;
+                if (spawnContainer.SpawnerChildren != null)
                 {
-                    UpdateSubcontainer(spawnedObChild);
+                    foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObChild in spawnContainer.SpawnerChildren)
+                    {
+                        UpdateSubcontainer(spawnedObChild);
+                    }
                 }
             }
         }
 
-        void UpdateSubcontainer(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+        void UpdateSubcontainer(LevelEditorSpawnedCommand.LevelPositionalContainer container)
         {
 
             DistanceSinceTrigger = ScrollPosition - container.TriggerPosition;
-            TimeSinceTrigger = EditorTime - container.TriggerTime;
+            TimeSinceTrigger = EditorTime - container.EditorTriggerTime;
             float LifeEnd = LevelLength;
             if (container.Life > 0)
             {
-                LifeEnd = container.TriggerTime + container.Life;
+                LifeEnd = container.EditorTriggerTime + container.Life;
             }
-            if (container.TriggerTime < EditorTime && LifeEnd > EditorTime)
+            if (container.EditorTriggerTime < EditorTime && LifeEnd > EditorTime)
             {
                 container.obj.SetActive(true);
                 if (container.parallaxScroll)
@@ -621,7 +649,61 @@ public class LevelEditor : MonoBehaviour
         return CurrentTime + (TargetDistance - CurrentDistance) / CurrentSpeed  - StartTime;
     }
 
-    void BuildScrollSpeedCache()
+    public static void RebuildScrollSpeedCache()
+    {
+        //TODO: BuildScrollSpeedCache, but using ScrollSpeeds and Levelholds rather than the parsed level
+        ScrollSpeedCache.Clear();
+        float HoldTime = 0;
+        int HoldIndex = 0;
+        int ScrollSpeedIndex = 0;
+
+        int SortByTriggerTime(LevelEditorSpawnedCommand.CommandContainer x, LevelEditorSpawnedCommand.CommandContainer y)
+        {
+            if (x.TriggerTime > y.TriggerTime) return 1;
+            if (x.TriggerTime < y.TriggerTime) return -1;
+            return 0;
+        };
+
+        LevelHolds.Sort(delegate (LevelEditorSpawnedCommand.LevelHoldContainer x, LevelEditorSpawnedCommand.LevelHoldContainer y)
+        {
+            return SortByTriggerTime(x, y);
+        });
+
+
+        ScrollSpeeds.Sort(delegate (LevelEditorSpawnedCommand.ScrollSpeedContainer x, LevelEditorSpawnedCommand.ScrollSpeedContainer y)
+        {
+            return SortByTriggerTime(x, y);
+        });
+
+        for (float TempTime = 0; TempTime < LevelDuration;)
+        {
+
+            if ((HoldIndex < LevelHolds.Count && ScrollSpeedIndex >= ScrollSpeeds.Count)||
+                (HoldIndex < LevelHolds.Count  && ScrollSpeedIndex < ScrollSpeeds.Count && LevelHolds[HoldIndex].TriggerTime <= ScrollSpeeds[ScrollSpeedIndex].TriggerTime))
+            {
+                //TODO: determine if I should do scrollspeed first instead (does it matter?)
+                //TODO: add the level hold
+                HoldTime += EditorHoldDelay;
+                TempTime = LevelHolds[HoldIndex].TriggerTime;
+                HoldIndex++;
+            }
+            else if (ScrollSpeedIndex < ScrollSpeeds.Count)
+            {
+                //TODO: add the scroll speed
+                //don't forget to add current HoldTime to TempTime in the cache
+                TempTime = ScrollSpeeds[ScrollSpeedIndex].TriggerTime;
+                ScrollSpeedIndex++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+
+    }
+
+    void BuildScrollSpeedCacheFirstPass()
     {
         //TODO: in the editor, ensure no scroll speed changes overlap one another
         float TempTime = 0;
@@ -651,9 +733,8 @@ public class LevelEditor : MonoBehaviour
                 }
                 if (add)
                 {
-                    LevelBreaks.Add(TempTime);
-                    HoldTime += LevelHoldDelay;
-                    TempTime += LevelHoldDelay;
+                    HoldTime += EditorHoldDelay;
+                    TempTime += EditorHoldDelay;
                 }
             }
             else if (line.Command == LevelParser.AvailableCommands.ScrollSpeed)
@@ -671,8 +752,9 @@ public class LevelEditor : MonoBehaviour
             }
             else if (line.Command == LevelParser.AvailableCommands.LevelEnd)
             {
-                LevelDuration = TempTime;
-                Debug.Log($"Level duration: {LevelDuration}");
+                LevelDurationEditor = TempTime;
+                LevelDuration = TempTime - HoldTime;
+                Debug.Log($"Level duration: {LevelDurationEditor}");
             }
         }
     }
@@ -719,8 +801,12 @@ public class LevelEditor : MonoBehaviour
     }
     void UpdateLevelLength()
     {
-        LevelLength = GetDistanceTraveledAtTime(LevelDuration);
+        LevelLength = GetDistanceTraveledAtTime(LevelDurationEditor);
+
+        //TODO: should I just make the scroll bar a constant size?
         levelScroll.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
+        commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -levelScroll.handleRect.rect.height/2);
+        commandsTrack.offsetMin = new Vector2(commandsTrack.offsetMin.x, levelScroll.handleRect.rect.height / 2);
     }
 
     static float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
@@ -739,20 +825,24 @@ public class LevelEditor : MonoBehaviour
         
     }
 
-    void UpdateUILine(LevelEditorSpawnedCommand.SpawnedObjectContainer container)
+    void UpdateUILine(LevelEditorSpawnedCommand.LevelPositionalContainer container)
     {
-        float VertPos = (container.TriggerTime / LevelDuration * (1 - levelScroll.size) + levelScroll.size / 2) * ScreenHeight - ScreenHeight / 2;
+        float VertPos = (container.EditorTriggerTime / LevelDurationEditor * (1 - levelScroll.size) + levelScroll.size / 2) * ScreenHeight - ScreenHeight / 2;
         UpdateUISubLine(container, new Vector3(LevelWidth / 2, VertPos));
 
-        if (container.SpawnerChildren != null)
+        if (container.CommandType == LevelParser.AvailableCommands.Spawn)
         {
-            foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in container.SpawnerChildren)
+            LevelEditorSpawnedCommand.SpawnedObjectContainer spawnContainer = (LevelEditorSpawnedCommand.SpawnedObjectContainer)container;
+            if (spawnContainer.SpawnerChildren != null)
             {
-                UpdateUISubLine(childContainer, container.obj.transform.position);
+                foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer childContainer in spawnContainer.SpawnerChildren)
+                {
+                    UpdateUISubLine(childContainer, container.obj.transform.position);
+                }
             }
         }
 
-        void UpdateUISubLine(LevelEditorSpawnedCommand.SpawnedObjectContainer container, Vector3 target)
+        void UpdateUISubLine(LevelEditorSpawnedCommand.LevelPositionalContainer container, Vector3 target)
         {
             if (container.line)
             {
