@@ -12,6 +12,7 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
     public Axes DragAxis = Axes.Y;
     public ControlInputs ControlInput = ControlInputs.SpawnTime;
     Vector3 OldLocation = Vector2.zero;
+    Vector2 TotalDelta = Vector2.zero;
     public LevelEditorSpawnedCommand.SpawnedObjectContainer command = null;
     private void Awake()
     {
@@ -26,6 +27,7 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
 
     public void OnBeginDrag(PointerEventData data)
     {
+        TotalDelta = Vector2.zero;
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:
@@ -42,15 +44,32 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IBeginDragHandler, I
         //TODO: pass along data to OnDrag for all selected commands (drag as group)
 
         //scale delta to be relative to game window viewport
+        TotalDelta += data.delta;
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:
                 //TODO: scale delta to match life time of level
                 float TempDragScale = 0.1f;
+                float PositionY = OldLocation.y + TotalDelta.y * TempDragScale;
 
                 //TODO: this should probably all go into a function
                 //TODO: account for holds in timeline
                 command.TriggerTime = Mathf.Clamp(command.TriggerTime+data.delta.y*TempDragScale, 0, LevelEditor.LevelDuration);
+                foreach(float f in LevelEditor.LevelBreaks)
+                {
+                    if (PositionY > f && PositionY < f + LevelEditor.LevelHoldDelay)
+                    {
+                        if (PositionY < f + LevelEditor.LevelHoldDelay / 2)
+                        {
+                            command.TriggerTime = f;
+                        }
+                        else
+                        {
+                            command.TriggerTime = f + LevelEditor.LevelHoldDelay;
+                        }
+                        break;
+                    }
+                }
                 command.TriggerPosition = LevelEditor.GetDistanceTraveledAtTime(command.TriggerTime);
                 
                 LevelEditor.DetermineCommandLifespan(command);

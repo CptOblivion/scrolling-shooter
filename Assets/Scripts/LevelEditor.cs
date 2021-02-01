@@ -28,6 +28,8 @@ public class LevelEditor : MonoBehaviour
     InputAction leftClick;
     static readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
 
+    public static readonly List<float> LevelBreaks = new List<float>();
+
     enum States {NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
 
@@ -67,7 +69,7 @@ public class LevelEditor : MonoBehaviour
 
     States state = States.NoLevel;
 
-    static readonly float LevelHoldDelay = 5;
+    public static readonly float LevelHoldDelay = 5;
 
     readonly List<LevelEditorSpawnedCommand.SpawnedObjectContainer> SpawnedObjects = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
     void Awake()
@@ -649,6 +651,7 @@ public class LevelEditor : MonoBehaviour
                 }
                 if (add)
                 {
+                    LevelBreaks.Add(TempTime);
                     HoldTime += LevelHoldDelay;
                     TempTime += LevelHoldDelay;
                 }
