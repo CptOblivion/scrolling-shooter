@@ -53,6 +53,7 @@ public class LevelEditor : MonoBehaviour
     public Color SpawnerChildLineColor = Color.green/2;
     public Color MultipleChildLineColor = Color.red / 2;
     public Color CommandLineSelectedColor = Color.white;
+    public Texture imageScrollSpeedLerp;
     public float TailLength = 40;
 
     int WindowResizeStage = 0;
@@ -73,6 +74,8 @@ public class LevelEditor : MonoBehaviour
     public static readonly List<LevelEditorSpawnedCommand.SpawnedObjectContainer> SpawnedObjects = new List<LevelEditorSpawnedCommand.SpawnedObjectContainer>();
     public static readonly List<LevelEditorSpawnedCommand.LevelHoldContainer> LevelHolds = new List<LevelEditorSpawnedCommand.LevelHoldContainer>();
     public static readonly List<LevelEditorSpawnedCommand.ScrollSpeedContainer> ScrollSpeeds = new List<LevelEditorSpawnedCommand.ScrollSpeedContainer>();
+
+    public List<LevelEditorSpawnedCommand.LevelHoldContainer> LevelHoldsReadout;
     void Awake()
     {
         current = this;
@@ -199,7 +202,9 @@ public class LevelEditor : MonoBehaviour
 
                     RectTransform ScrollSpeedRect = newScrollOb.AddComponent<RectTransform>();
                     RawImage scrollImage = newScrollOb.AddComponent<RawImage>();
-                    scrollImage.color = Color.red;
+                    scrollImage.texture = imageScrollSpeedLerp;
+                    //TODO: put the lerp image in a child, next to a rectangle for the filled portion of the scroll speed, within this recttransform
+                    //TODO: if going from low speed to high, reverse the lerp image
 
                     ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
                     ScrollSpeedRect.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
@@ -208,6 +213,7 @@ public class LevelEditor : MonoBehaviour
 
                     LevelEditorSpawnedCommand.ScrollSpeedContainer newScrollCommand = new LevelEditorSpawnedCommand.ScrollSpeedContainer(newScrollOb, CurrentCommandIndex, TempTime - TempHoldTime, TempTime, NewSpeed, LerpTime );
                     ScrollSpeeds.Add(newScrollCommand);
+                    newScrollCommand.AddTimeCollider();
 
                     break;
                 case LevelParser.AvailableCommands.HoldForDeath:
@@ -225,6 +231,7 @@ public class LevelEditor : MonoBehaviour
                         GameObject newHoldOb = new GameObject();
                         newHoldOb.transform.SetParent(commandsTrack, false);
                         RectTransform HoldRect = newHoldOb.AddComponent<RectTransform>();
+                        HoldRect.SetAsFirstSibling();
                         newHoldOb.AddComponent<RawImage>();
 
                         HoldRect.offsetMin = HoldRect.offsetMax = Vector2.zero;
@@ -765,6 +772,7 @@ public class LevelEditor : MonoBehaviour
         }
 
 
+        current.LevelHoldsReadout = LevelHolds;
     }
 
     void BuildScrollSpeedCacheFirstPass()
@@ -821,6 +829,7 @@ public class LevelEditor : MonoBehaviour
                 Debug.Log($"Level duration: {LevelDurationEditor}");
             }
         }
+        LevelHoldsReadout = LevelHolds;
     }
     bool UpdateWindowShape()
     {

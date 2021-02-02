@@ -6,9 +6,11 @@ using UnityEngine.EventSystems;
 
 public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
+    [System.Serializable]
     public class CommandContainer
     {
-        float TempDragScale = 0.1f;
+        static readonly float CommandAfterHoldOffset = .01f;
+        static readonly float TempDragScale = 0.1f;
         public GameObject obj;
         public LevelParser.AvailableCommands CommandType;
         public float EditorTriggerTime;
@@ -69,29 +71,23 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public virtual void DragTimeline(PointerEventData data)
         {
-
-            //TODO: this should probably all go into a function
             TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) * TempDragScale, 0, LevelEditor.LevelDurationEditor);
             foreach (LevelHoldContainer hold in LevelEditor.LevelHolds)
             {
                 if (EditorTriggerTime > hold.EditorTriggerTime)
                 {
-                    TriggerTime -= LevelEditor.EditorHoldDelay; //subtract out the trigger delay so our trigger time is correct in playback
+                    //TODO: match position to cursor position better
+                    //  using EditorTriggerTime as tbe base and subtracting holds back out of TriggerTime caused flickering in commands that caused level scroll cache rebuilds
+                    //  maybe that's fixable, but it might just be easier to hack it from this direction instead
+                    EditorTriggerTime += LevelEditor.EditorHoldDelay;
                     if (EditorTriggerTime < hold.EditorTriggerTime + LevelEditor.EditorHoldDelay)
                     {
-                        if (EditorTriggerTime < hold.EditorTriggerTime + LevelEditor.EditorHoldDelay / 2) //if we're before the halfway point, move back to the start
-                        {
-                            EditorTriggerTime = hold.EditorTriggerTime;
-                            TriggerTime += LevelEditor.EditorHoldDelay; //since we moved to just before the trigger, add the hold delay back in
-                        }
-                        else
-                        {
-                            EditorTriggerTime = hold.EditorTriggerTime + LevelEditor.EditorHoldDelay + .01f;
-                        }
+                        EditorTriggerTime = hold.EditorTriggerTime + LevelEditor.EditorHoldDelay + CommandAfterHoldOffset;
                     }
                 }
             }
             UpdateTime();
+            
 
         }
         public virtual void EndDragTimeline(PointerEventData data)
@@ -120,6 +116,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
     }
 
+    [System.Serializable]
     public class LevelPositionalContainer : CommandContainer
     {
         public Vector3 StartPosition;
@@ -214,6 +211,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
     }
 
+    [System.Serializable]
     public class LevelHoldContainer : CommandContainer
     {
         public float DelayPreview = 5;
@@ -225,9 +223,9 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             EditorTriggerTime = editorTime;
             obj = ob;
         }
-        public override void UpdateTime()
+        public override void DragTimeline(PointerEventData data)
         {
-            base.UpdateTime();
+            base.DragTimeline(data);
             LevelEditor.RebuildScrollSpeedCache();
             RectTransform r = (RectTransform)obj.transform;
             r.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
@@ -235,6 +233,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
     }
 
+    [System.Serializable]
     public class ScrollSpeedContainer: CommandContainer
     {
         public float NewSpeed;
@@ -258,6 +257,13 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
             ScrollSpeedRect.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
             ScrollSpeedRect.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, .5f)) / LevelEditor.LevelDurationEditor);
+        }
+
+        public override void DragTimeline(PointerEventData data)
+        {
+            base.DragTimeline(data);
+            LevelEditor.RebuildScrollSpeedCache();
+
         }
     }
     public class SpawnedObjectContainer: LevelPositionalContainer

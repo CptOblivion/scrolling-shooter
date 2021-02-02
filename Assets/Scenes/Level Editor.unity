@@ -803,9 +803,12 @@ MonoBehaviour:
   SpawnerChildLineColor: {r: 0, g: 0.5, b: 0, a: 0.5}
   MultipleChildLineColor: {r: 0.5, g: 0, b: 0, a: 0.5}
   CommandLineSelectedColor: {r: 1, g: 1, b: 1, a: 1}
+  imageScrollSpeedLerp: {fileID: 2800000, guid: 96b013f28607e3141ad0c7a7f81502e2,
+    type: 3}
   TailLength: 1
   UILineWidth: 2
   UILineHoveredWidth: 5
+  LevelHoldsReadout: []
 --- !u!114 &437177344
 MonoBehaviour:
   m_ObjectHideFlags: 0
