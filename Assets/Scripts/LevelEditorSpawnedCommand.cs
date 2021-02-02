@@ -8,6 +8,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 {
     public class CommandContainer
     {
+        float TempDragScale = 0.1f;
         public GameObject obj;
         public LevelParser.AvailableCommands CommandType;
         public float EditorTriggerTime;
@@ -68,7 +69,6 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public virtual void DragTimeline(PointerEventData data)
         {
-            float TempDragScale = 0.1f;
 
             //TODO: this should probably all go into a function
             TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) * TempDragScale, 0, LevelEditor.LevelDurationEditor);
@@ -212,7 +212,6 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             LevelEditor.DetermineCommandLifespan(this);
             LevelEditor.UpdateCommand(this);
         }
-
     }
 
     public class LevelHoldContainer : CommandContainer
@@ -229,14 +228,10 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public override void UpdateTime()
         {
             base.UpdateTime();
-            //TODO: rebuild level speeds, level duration, level length
-            //TODO: pop intersecting commands to before or after us
-        }
-
-        public override void HoverEnter()
-        {
-            base.HoverEnter();
-            Debug.Log("hovering");
+            LevelEditor.RebuildScrollSpeedCache();
+            RectTransform r = (RectTransform)obj.transform;
+            r.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
+            r.anchorMax = new Vector2(1, (EditorTriggerTime + LevelEditor.EditorHoldDelay) / LevelEditor.LevelDurationEditor);
         }
     }
 
@@ -253,6 +248,16 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             NewSpeed = speed;
             LerpTime = lerp;
             obj = ob;
+        }
+
+        public override void UpdateTime()
+        {
+            base.UpdateTime();
+
+            RectTransform ScrollSpeedRect = obj.GetComponent<RectTransform>();
+            ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
+            ScrollSpeedRect.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
+            ScrollSpeedRect.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, .5f)) / LevelEditor.LevelDurationEditor);
         }
     }
     public class SpawnedObjectContainer: LevelPositionalContainer

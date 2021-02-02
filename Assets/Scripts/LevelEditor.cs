@@ -183,6 +183,33 @@ public class LevelEditor : MonoBehaviour
 
             switch (line.Command)
             {
+                case LevelParser.AvailableCommands.ScrollSpeed:
+                    float LerpTime = 0;
+                    GetNextArgument();
+                    float NewSpeed = float.Parse(val);
+                    while (GetNextArgument())
+                    {
+                        if (arg == "Lerp")
+                        {
+                            LerpTime = float.Parse(val);
+                        }
+                    }
+                    GameObject newScrollOb = new GameObject();
+                    newScrollOb.transform.SetParent(commandsTrack, false);
+
+                    RectTransform ScrollSpeedRect = newScrollOb.AddComponent<RectTransform>();
+                    RawImage scrollImage = newScrollOb.AddComponent<RawImage>();
+                    scrollImage.color = Color.red;
+
+                    ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
+                    ScrollSpeedRect.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
+                    ScrollSpeedRect.anchorMax = new Vector2(1, (TempTime + Mathf.Max(LerpTime, .5f)) / LevelDurationEditor);
+
+
+                    LevelEditorSpawnedCommand.ScrollSpeedContainer newScrollCommand = new LevelEditorSpawnedCommand.ScrollSpeedContainer(newScrollOb, CurrentCommandIndex, TempTime - TempHoldTime, TempTime, NewSpeed, LerpTime );
+                    ScrollSpeeds.Add(newScrollCommand);
+
+                    break;
                 case LevelParser.AvailableCommands.HoldForDeath:
                     bool add = true;
                     while (GetNextArgument())
@@ -197,16 +224,18 @@ public class LevelEditor : MonoBehaviour
                     {
                         GameObject newHoldOb = new GameObject();
                         newHoldOb.transform.SetParent(commandsTrack, false);
-                        RectTransform t = newHoldOb.AddComponent<RectTransform>();
+                        RectTransform HoldRect = newHoldOb.AddComponent<RectTransform>();
                         newHoldOb.AddComponent<RawImage>();
 
-                        t.offsetMin = t.offsetMax = Vector2.zero;
-                        t.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
-                        t.anchorMax = new Vector2(1, (TempTime+EditorHoldDelay)/LevelDurationEditor);
+                        HoldRect.offsetMin = HoldRect.offsetMax = Vector2.zero;
+                        HoldRect.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
+                        HoldRect.anchorMax = new Vector2(1, (TempTime+EditorHoldDelay)/LevelDurationEditor);
 
-                        LevelEditorSpawnedCommand.LevelHoldContainer newCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
-                        LevelHolds.Add(newCommand);
-                        newCommand.AddTimeCollider();
+                        LevelEditorSpawnedCommand.LevelHoldContainer newHoldCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
+                        LevelEditorSpawnedCommand newHoldComponent = newHoldOb.AddComponent<LevelEditorSpawnedCommand>();
+                        newHoldComponent.command = newHoldCommand;
+                        LevelHolds.Add(newHoldCommand);
+                        newHoldCommand.AddTimeCollider();
                         TempHoldTime += EditorHoldDelay;
                         TempTime += EditorHoldDelay;
                     }
@@ -682,9 +711,10 @@ public class LevelEditor : MonoBehaviour
                 (HoldIndex < LevelHolds.Count  && ScrollSpeedIndex < ScrollSpeeds.Count && LevelHolds[HoldIndex].TriggerTime <= ScrollSpeeds[ScrollSpeedIndex].TriggerTime))
             {
                 //TODO: determine if I should do scrollspeed first instead (does it matter?)
-                //TODO: add the level hold
-                HoldTime += EditorHoldDelay;
+
                 TempTime = LevelHolds[HoldIndex].TriggerTime;
+                LevelHolds[HoldIndex].EditorTriggerTime = TempTime + HoldTime;
+                HoldTime += EditorHoldDelay;
                 HoldIndex++;
             }
             else if (ScrollSpeedIndex < ScrollSpeeds.Count)
@@ -692,12 +722,46 @@ public class LevelEditor : MonoBehaviour
                 //TODO: add the scroll speed
                 //don't forget to add current HoldTime to TempTime in the cache
                 TempTime = ScrollSpeeds[ScrollSpeedIndex].TriggerTime;
+                ScrollSpeedCache.Add(new ScrollSpeedChange(TempTime + HoldTime, ScrollSpeeds[ScrollSpeedIndex].NewSpeed, ScrollSpeeds[ScrollSpeedIndex].LerpTime));
                 ScrollSpeedIndex++;
             }
             else
             {
                 break;
             }
+        }
+
+        SpawnedObjects.Sort(delegate (LevelEditorSpawnedCommand.SpawnedObjectContainer x, LevelEditorSpawnedCommand.SpawnedObjectContainer y)
+        {
+            return SortByTriggerTime(x, y);
+        });
+
+        int LevelHoldIndex = 0;
+
+        foreach (LevelEditorSpawnedCommand.SpawnedObjectContainer spawnedObjectTemp in SpawnedObjects)
+        {
+            while (LevelHoldIndex < LevelHolds.Count && spawnedObjectTemp.TriggerTime > LevelHolds[LevelHoldIndex].TriggerTime)
+            {
+                LevelHoldIndex++;
+            }
+            spawnedObjectTemp.EditorTriggerTime = spawnedObjectTemp.TriggerTime + LevelHoldIndex*EditorHoldDelay;
+            spawnedObjectTemp.UpdateTime();
+        }
+        ScrollSpeeds.Sort(delegate (LevelEditorSpawnedCommand.ScrollSpeedContainer x, LevelEditorSpawnedCommand.ScrollSpeedContainer y)
+        {
+            return SortByTriggerTime(x, y);
+        });
+
+        LevelHoldIndex = 0;
+
+        foreach (LevelEditorSpawnedCommand.ScrollSpeedContainer scrollSpeedTemp in ScrollSpeeds)
+        {
+            while (LevelHoldIndex < LevelHolds.Count && scrollSpeedTemp.TriggerTime > LevelHolds[LevelHoldIndex].TriggerTime)
+            {
+                LevelHoldIndex++;
+            }
+            scrollSpeedTemp.EditorTriggerTime = scrollSpeedTemp.TriggerTime + LevelHoldIndex * EditorHoldDelay;
+            scrollSpeedTemp.UpdateTime();
         }
 
 
