@@ -7,9 +7,6 @@ using UnityEngine.InputSystem;
 
 public class LevelEditor : MonoBehaviour
 {
-    public Text scrollTimeReadout;
-    public Text activeSelectionName;
-
     class ScrollSpeedChange
     {
         public float Time;
@@ -22,6 +19,14 @@ public class LevelEditor : MonoBehaviour
             LerpTime = lerpTime;
         }
     }
+
+    public static float DragScale = .1f;
+    public static float ScrollZoom = 1;
+    public static float ScrollZoomOffset = 0; //might not need
+
+    public Text scrollTimeReadout;
+    public Text activeSelectionName;
+
 
     public InputActionAsset actionMapUI;
     InputAction mousePos;
@@ -206,12 +211,8 @@ public class LevelEditor : MonoBehaviour
                     //TODO: put the lerp image in a child, next to a rectangle for the filled portion of the scroll speed, within this recttransform
                     //TODO: if going from low speed to high, reverse the lerp image
 
-                    ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
-                    ScrollSpeedRect.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
-                    ScrollSpeedRect.anchorMax = new Vector2(1, (TempTime + Mathf.Max(LerpTime, .5f)) / LevelDurationEditor);
-
-
                     LevelEditorSpawnedCommand.ScrollSpeedContainer newScrollCommand = new LevelEditorSpawnedCommand.ScrollSpeedContainer(newScrollOb, CurrentCommandIndex, TempTime - TempHoldTime, TempTime, NewSpeed, LerpTime );
+                    newScrollCommand.UpdateTimelineVisuals();
                     ScrollSpeeds.Add(newScrollCommand);
                     newScrollCommand.AddTimeCollider();
 
@@ -230,13 +231,6 @@ public class LevelEditor : MonoBehaviour
                     {
                         GameObject newHoldOb = new GameObject();
                         newHoldOb.transform.SetParent(commandsTrack, false);
-                        RectTransform HoldRect = newHoldOb.AddComponent<RectTransform>();
-                        HoldRect.SetAsFirstSibling();
-                        newHoldOb.AddComponent<RawImage>();
-
-                        HoldRect.offsetMin = HoldRect.offsetMax = Vector2.zero;
-                        HoldRect.anchorMin = new Vector2(0, TempTime / LevelDurationEditor);
-                        HoldRect.anchorMax = new Vector2(1, (TempTime+EditorHoldDelay)/LevelDurationEditor);
 
                         LevelEditorSpawnedCommand.LevelHoldContainer newHoldCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
                         LevelEditorSpawnedCommand newHoldComponent = newHoldOb.AddComponent<LevelEditorSpawnedCommand>();
@@ -245,6 +239,12 @@ public class LevelEditor : MonoBehaviour
                         newHoldCommand.AddTimeCollider();
                         TempHoldTime += EditorHoldDelay;
                         TempTime += EditorHoldDelay;
+
+                        newHoldOb.AddComponent<RectTransform>();
+                        RectTransform HoldRect = newHoldCommand.UpdateTimelineVisuals();
+                        HoldRect.SetAsFirstSibling(); //holds should go underneath everything else
+                        //TODO: maybe make a separate root transform for each type of command, for better sorting (and easy toggling of visibility/editability)
+                        newHoldOb.AddComponent<RawImage>();
                     }
                     break;
                 case LevelParser.AvailableCommands.Spawn:
@@ -687,7 +687,7 @@ public class LevelEditor : MonoBehaviour
 
     public static void RebuildScrollSpeedCache()
     {
-        //TODO: BuildScrollSpeedCache, but using ScrollSpeeds and Levelholds rather than the parsed level
+        //TODO: at the end of this, recalculate spawners that are set to distance mode
         ScrollSpeedCache.Clear();
         float HoldTime = 0;
         int HoldIndex = 0;

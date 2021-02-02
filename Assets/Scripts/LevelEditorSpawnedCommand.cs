@@ -6,11 +6,12 @@ using UnityEngine.EventSystems;
 
 public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
+    //TODO: make this a control or something, somewhere
+    static readonly float CommandThickness = .5f;
     [System.Serializable]
     public class CommandContainer
     {
         static readonly float CommandAfterHoldOffset = .01f;
-        static readonly float TempDragScale = 0.1f;
         public GameObject obj;
         public LevelParser.AvailableCommands CommandType;
         public float EditorTriggerTime;
@@ -61,6 +62,15 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         {
             SetVisualsHovered();
         }
+
+        public virtual RectTransform UpdateTimelineVisuals()
+        {
+            RectTransform r = (RectTransform)obj.transform;
+            r.offsetMin = r.offsetMax = Vector2.zero;
+            r.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
+            r.anchorMax = new Vector2(1, EditorTriggerTime + CommandThickness / LevelEditor.LevelDurationEditor);
+            return r;
+        }
         public virtual void PointerDown(PointerEventData data)
         {
             ClickOrigin = data.position;
@@ -71,7 +81,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public virtual void DragTimeline(PointerEventData data)
         {
-            TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) * TempDragScale, 0, LevelEditor.LevelDurationEditor);
+            TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) * LevelEditor.DragScale / LevelEditor.ScrollZoom, 0, LevelEditor.LevelDurationEditor);
             foreach (LevelHoldContainer hold in LevelEditor.LevelHolds)
             {
                 if (EditorTriggerTime > hold.EditorTriggerTime)
@@ -227,9 +237,16 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         {
             base.DragTimeline(data);
             LevelEditor.RebuildScrollSpeedCache();
-            RectTransform r = (RectTransform)obj.transform;
-            r.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
+            foreach(LevelHoldContainer hold in LevelEditor.LevelHolds)
+            {
+                hold.UpdateTimelineVisuals();
+            }
+        }
+        public override RectTransform UpdateTimelineVisuals()
+        {
+            RectTransform r = base.UpdateTimelineVisuals();
             r.anchorMax = new Vector2(1, (EditorTriggerTime + LevelEditor.EditorHoldDelay) / LevelEditor.LevelDurationEditor);
+            return r;
         }
     }
 
@@ -252,18 +269,20 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public override void UpdateTime()
         {
             base.UpdateTime();
-
-            RectTransform ScrollSpeedRect = obj.GetComponent<RectTransform>();
-            ScrollSpeedRect.offsetMin = ScrollSpeedRect.offsetMax = Vector2.zero;
-            ScrollSpeedRect.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
-            ScrollSpeedRect.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, .5f)) / LevelEditor.LevelDurationEditor);
+            UpdateTimelineVisuals();
         }
 
         public override void DragTimeline(PointerEventData data)
         {
             base.DragTimeline(data);
             LevelEditor.RebuildScrollSpeedCache();
+        }
 
+        public override RectTransform UpdateTimelineVisuals()
+        {
+            RectTransform r = base.UpdateTimelineVisuals();
+            r.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, CommandThickness)) / LevelEditor.LevelDurationEditor);
+            return r;
         }
     }
     public class SpawnedObjectContainer: LevelPositionalContainer
