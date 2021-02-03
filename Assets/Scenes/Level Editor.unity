@@ -799,6 +799,9 @@ MonoBehaviour:
   LevelParsed: []
   UIShowSpawnLines: {fileID: 635539106}
   ShowLevelFrame: {fileID: 1232482616}
+  ScrollSpeedNodeColor: {r: 0.48299998, g: 0, b: 0, a: 0.627451}
+  ScrollSpeedFillColor: {r: 0.347, g: 0, b: 0, a: 0.45882353}
+  TimelineHoldColor: {r: 1, g: 1, b: 1, a: 1}
   CommandLineColor: {r: 0, g: 0, b: 0, a: 1}
   SpawnerChildLineColor: {r: 0, g: 0.5, b: 0, a: 0.5}
   MultipleChildLineColor: {r: 0.5, g: 0, b: 0, a: 0.5}
@@ -808,7 +811,6 @@ MonoBehaviour:
   TailLength: 1
   UILineWidth: 2
   UILineHoveredWidth: 5
-  LevelHoldsReadout: []
 --- !u!114 &437177344
 MonoBehaviour:
   m_ObjectHideFlags: 0

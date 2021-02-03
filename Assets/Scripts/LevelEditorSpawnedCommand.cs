@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
@@ -18,6 +19,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public float TriggerTime;
         public int CommandIndex;
         public LevelEditorCommandDragControl SliderSpawnTime = null;
+        public RectTransform rect;
 
         protected Vector3 OldLocation = Vector2.zero;
         protected Vector2 ClickOrigin = Vector2.zero;
@@ -63,13 +65,19 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             SetVisualsHovered();
         }
 
-        public virtual RectTransform UpdateTimelineVisuals()
+        public virtual void AddVisualsToTimeline()
         {
-            RectTransform r = (RectTransform)obj.transform;
-            r.offsetMin = r.offsetMax = Vector2.zero;
-            r.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
-            r.anchorMax = new Vector2(1, EditorTriggerTime + CommandThickness / LevelEditor.LevelDurationEditor);
-            return r;
+            obj.transform.SetParent(LevelEditor.current.commandsTrack, false);
+            rect = obj.AddComponent<RectTransform>();
+            UpdateTimelineVisuals();
+
+        }
+        public virtual void UpdateTimelineVisuals()
+        {
+            rect = (RectTransform)obj.transform;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            rect.anchorMin = new Vector2(0, EditorTriggerTime / LevelEditor.LevelDurationEditor);
+            rect.anchorMax = new Vector2(1, EditorTriggerTime + CommandThickness / LevelEditor.LevelDurationEditor);
         }
         public virtual void PointerDown(PointerEventData data)
         {
@@ -126,7 +134,6 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
     }
 
-    [System.Serializable]
     public class LevelPositionalContainer : CommandContainer
     {
         public Vector3 StartPosition;
@@ -221,7 +228,6 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
     }
 
-    [System.Serializable]
     public class LevelHoldContainer : CommandContainer
     {
         public float DelayPreview = 5;
@@ -242,19 +248,29 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                 hold.UpdateTimelineVisuals();
             }
         }
-        public override RectTransform UpdateTimelineVisuals()
+        public override void UpdateTimelineVisuals()
         {
-            RectTransform r = base.UpdateTimelineVisuals();
-            r.anchorMax = new Vector2(1, (EditorTriggerTime + LevelEditor.EditorHoldDelay) / LevelEditor.LevelDurationEditor);
-            return r;
+            base.UpdateTimelineVisuals();
+            rect.anchorMax = new Vector2(1, (EditorTriggerTime + LevelEditor.EditorHoldDelay) / LevelEditor.LevelDurationEditor);
+        }
+        public override void AddVisualsToTimeline()
+        {
+            base.AddVisualsToTimeline();
+            obj.AddComponent<RawImage>().color = LevelEditor.current.TimelineHoldColor;
         }
     }
 
-    [System.Serializable]
     public class ScrollSpeedContainer: CommandContainer
     {
         public float NewSpeed;
         public float LerpTime;
+        public float OldSpeed = 0;
+        public RawImage imageSlope;
+        public RawImage imageBlock;
+        public RectTransform rectSlope;
+        public RectTransform rectBlock;
+        public RectTransform rectFill;
+        public int ScrollSpeedIndex = 0;
         public ScrollSpeedContainer(GameObject ob, int commandIndex, float triggerTime, float editorTime, float speed, float lerp)
         {
             CommandType = LevelParser.AvailableCommands.ScrollSpeed;
@@ -278,11 +294,80 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             LevelEditor.RebuildScrollSpeedCache();
         }
 
-        public override RectTransform UpdateTimelineVisuals()
+        public override void AddVisualsToTimeline()
         {
-            RectTransform r = base.UpdateTimelineVisuals();
-            r.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, CommandThickness)) / LevelEditor.LevelDurationEditor);
-            return r;
+            GameObject slopeOb = new GameObject("slope");
+            slopeOb.transform.SetParent(obj.transform, false);
+            rectSlope = slopeOb.AddComponent<RectTransform>();
+            imageSlope = slopeOb.AddComponent<RawImage>();
+            imageSlope.texture = LevelEditor.current.imageScrollSpeedLerp;
+            imageSlope.color = LevelEditor.current.ScrollSpeedNodeColor;
+            rectSlope.offsetMin = rectSlope.offsetMax = Vector2.zero;
+
+            GameObject blockOb = new GameObject("body");
+            blockOb.transform.SetParent(obj.transform, false);
+            rectBlock = blockOb.AddComponent<RectTransform>();
+            imageBlock = blockOb.AddComponent<RawImage>();
+            imageBlock.color = LevelEditor.current.ScrollSpeedNodeColor;
+            rectBlock.anchorMax = Vector2.one;
+            rectBlock.offsetMin = rectBlock.offsetMax = Vector2.zero;
+
+            GameObject fillOb = new GameObject("scrollspeedFill");
+            fillOb.transform.SetParent(LevelEditor.current.commandsTrack, false);
+            rectFill = fillOb.AddComponent<RectTransform>();
+
+            RawImage imageFill = fillOb.AddComponent<RawImage>();
+            imageFill.color = LevelEditor.current.ScrollSpeedFillColor;
+            imageFill.raycastTarget = false;
+
+            rectFill.offsetMax = rectFill.offsetMin = Vector2.zero;
+
+            base.AddVisualsToTimeline();
+
+            UpdateTimelineVisuals();
+
+            Destroy(obj.GetComponent<RawImage>());
+
+        }
+
+        public override void UpdateTimelineVisuals()
+        {
+            float TempMaxScrollSpeed = 40;
+            base.UpdateTimelineVisuals();
+            rect.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, CommandThickness)) / LevelEditor.LevelDurationEditor);
+            if (NewSpeed > OldSpeed)
+            {
+                imageSlope.uvRect = new Rect(0, 1, 1, -1);
+            }
+            else
+            {
+                imageSlope.uvRect = new Rect(0, 0, 1, 1);
+            }
+
+            float Midpoint = 1-(Mathf.Min(OldSpeed, NewSpeed) / TempMaxScrollSpeed);
+            float max = 1-(Mathf.Max(OldSpeed, NewSpeed) / TempMaxScrollSpeed); 
+            rectBlock.anchorMin = new Vector2(Midpoint, 0);
+            rectSlope.anchorMax = new Vector2(Midpoint, 1);
+            rectSlope.anchorMin = new Vector2(max, 0);
+
+
+            //TODO: case for OldSpeed and NewSpeed are both 0 (just fill the back of the node with a rectangle at all times?)
+        }
+
+        public void UpdateFill()
+        {
+            float TempMaxScrollSpeed = 40;
+            rectFill.anchorMin = new Vector2(1-(NewSpeed / TempMaxScrollSpeed), rect.anchorMax.y);
+            //TODO: replace the following anchormax.y with the anchormin.y of the *next* scroll speed change (or 1, if we're the last chagne)
+
+            if (ScrollSpeedIndex == LevelEditor.ScrollSpeeds.Count - 1)
+            {
+                rectFill.anchorMax = new Vector2(1, 1);
+            }
+            else
+            {
+                rectFill.anchorMax = new Vector2(1, LevelEditor.ScrollSpeeds[ScrollSpeedIndex + 1].rect.anchorMin.y);
+            }
         }
     }
     public class SpawnedObjectContainer: LevelPositionalContainer

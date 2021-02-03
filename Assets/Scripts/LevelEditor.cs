@@ -54,6 +54,10 @@ public class LevelEditor : MonoBehaviour
     public Toggle UIShowSpawnLines;
     public RectTransform ShowLevelFrame;
 
+    public Color ScrollSpeedNodeColor = Color.red / 2;
+    public Color ScrollSpeedFillColor = Color.red / 3;
+    public Color TimelineHoldColor = Color.white;
+
     public Color CommandLineColor = Color.white;
     public Color SpawnerChildLineColor = Color.green/2;
     public Color MultipleChildLineColor = Color.red / 2;
@@ -203,16 +207,18 @@ public class LevelEditor : MonoBehaviour
                         }
                     }
                     GameObject newScrollOb = new GameObject();
-                    newScrollOb.transform.SetParent(commandsTrack, false);
 
-                    RectTransform ScrollSpeedRect = newScrollOb.AddComponent<RectTransform>();
-                    RawImage scrollImage = newScrollOb.AddComponent<RawImage>();
-                    scrollImage.texture = imageScrollSpeedLerp;
+
                     //TODO: put the lerp image in a child, next to a rectangle for the filled portion of the scroll speed, within this recttransform
                     //TODO: if going from low speed to high, reverse the lerp image
 
                     LevelEditorSpawnedCommand.ScrollSpeedContainer newScrollCommand = new LevelEditorSpawnedCommand.ScrollSpeedContainer(newScrollOb, CurrentCommandIndex, TempTime - TempHoldTime, TempTime, NewSpeed, LerpTime );
-                    newScrollCommand.UpdateTimelineVisuals();
+                    newScrollCommand.AddVisualsToTimeline();
+                    if (ScrollSpeeds.Count > 0)
+                        newScrollCommand.OldSpeed = ScrollSpeeds[ScrollSpeeds.Count - 1].NewSpeed;
+                    else
+                        newScrollCommand.OldSpeed = 0;
+                    newScrollCommand.ScrollSpeedIndex = ScrollSpeeds.Count;
                     ScrollSpeeds.Add(newScrollCommand);
                     newScrollCommand.AddTimeCollider();
 
@@ -230,7 +236,6 @@ public class LevelEditor : MonoBehaviour
                     if (add)
                     {
                         GameObject newHoldOb = new GameObject();
-                        newHoldOb.transform.SetParent(commandsTrack, false);
 
                         LevelEditorSpawnedCommand.LevelHoldContainer newHoldCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
                         LevelEditorSpawnedCommand newHoldComponent = newHoldOb.AddComponent<LevelEditorSpawnedCommand>();
@@ -240,11 +245,9 @@ public class LevelEditor : MonoBehaviour
                         TempHoldTime += EditorHoldDelay;
                         TempTime += EditorHoldDelay;
 
-                        newHoldOb.AddComponent<RectTransform>();
-                        RectTransform HoldRect = newHoldCommand.UpdateTimelineVisuals();
-                        HoldRect.SetAsFirstSibling(); //holds should go underneath everything else
+                        newHoldCommand.AddVisualsToTimeline();
+                        newHoldCommand.rect.SetAsFirstSibling(); //holds should go underneath everything else
                         //TODO: maybe make a separate root transform for each type of command, for better sorting (and easy toggling of visibility/editability)
-                        newHoldOb.AddComponent<RawImage>();
                     }
                     break;
                 case LevelParser.AvailableCommands.Spawn:
@@ -420,6 +423,14 @@ public class LevelEditor : MonoBehaviour
 
             }
         }
+
+        foreach (LevelEditorSpawnedCommand.ScrollSpeedContainer scroll in ScrollSpeeds)
+        {
+            scroll.UpdateTimelineVisuals();
+        }
+
+        UpdateScrollSpeedFills();
+
         UpdateLevelLength();
 
         UpdateLevelScroll(0);
@@ -754,23 +765,28 @@ public class LevelEditor : MonoBehaviour
             spawnedObjectTemp.EditorTriggerTime = spawnedObjectTemp.TriggerTime + LevelHoldIndex*EditorHoldDelay;
             spawnedObjectTemp.UpdateTime();
         }
-        ScrollSpeeds.Sort(delegate (LevelEditorSpawnedCommand.ScrollSpeedContainer x, LevelEditorSpawnedCommand.ScrollSpeedContainer y)
-        {
-            return SortByTriggerTime(x, y);
-        });
 
         LevelHoldIndex = 0;
 
-        foreach (LevelEditorSpawnedCommand.ScrollSpeedContainer scrollSpeedTemp in ScrollSpeeds)
+        for(int i = 0; i < ScrollSpeeds.Count; i++)
         {
-            while (LevelHoldIndex < LevelHolds.Count && scrollSpeedTemp.TriggerTime > LevelHolds[LevelHoldIndex].TriggerTime)
+            ScrollSpeeds[i].ScrollSpeedIndex = i;
+            while (LevelHoldIndex < LevelHolds.Count && ScrollSpeeds[i].TriggerTime > LevelHolds[LevelHoldIndex].TriggerTime)
             {
                 LevelHoldIndex++;
             }
-            scrollSpeedTemp.EditorTriggerTime = scrollSpeedTemp.TriggerTime + LevelHoldIndex * EditorHoldDelay;
-            scrollSpeedTemp.UpdateTime();
+            ScrollSpeeds[i].EditorTriggerTime = ScrollSpeeds[i].TriggerTime + LevelHoldIndex * EditorHoldDelay;
+            if (i > 0)
+            {
+                ScrollSpeeds[i].OldSpeed = ScrollSpeeds[i - 1].NewSpeed;
+            }
+            else
+            {
+                ScrollSpeeds[i].OldSpeed = 0;
+            }
+            ScrollSpeeds[i].UpdateTime();
         }
-
+        UpdateScrollSpeedFills();
 
         current.LevelHoldsReadout = LevelHolds;
     }
@@ -870,6 +886,8 @@ public class LevelEditor : MonoBehaviour
             UpdateUILines();
             WindowResizeStage++;
         }
+
+        UpdateCommandsTrackSize();
         return false;
     }
     void UpdateLevelLength()
@@ -878,7 +896,12 @@ public class LevelEditor : MonoBehaviour
 
         //TODO: should I just make the scroll bar a constant size?
         levelScroll.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
-        commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -levelScroll.handleRect.rect.height/2);
+        UpdateCommandsTrackSize();
+    }
+
+    void UpdateCommandsTrackSize()
+    {
+        commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -levelScroll.handleRect.rect.height / 2);
         commandsTrack.offsetMin = new Vector2(commandsTrack.offsetMin.x, levelScroll.handleRect.rect.height / 2);
     }
 
@@ -950,5 +973,13 @@ public class LevelEditor : MonoBehaviour
     void UpdateUILines(bool b)
     {
         UpdateUILines();
+    }
+
+    static void UpdateScrollSpeedFills()
+    {
+        foreach (LevelEditorSpawnedCommand.ScrollSpeedContainer scroll in ScrollSpeeds)
+        {
+            scroll.UpdateFill();
+        }
     }
 }
