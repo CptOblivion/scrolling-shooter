@@ -85,22 +85,23 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public virtual void BeginDragTimeline(PointerEventData data)
         {
-            OldLocation = new Vector2(0, TriggerTime);
+            OldLocation = new Vector2(0, EditorTriggerTime);
         }
         public virtual void DragTimeline(PointerEventData data)
         {
-            TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) * LevelEditor.DragScale / LevelEditor.ScrollZoom, 0, LevelEditor.LevelDurationEditor);
+            TriggerTime = EditorTriggerTime = Mathf.Clamp(OldLocation.y + (data.position.y - ClickOrigin.y) / LevelEditor.CommandDragScale * LevelEditor.LevelDurationEditor, 0, LevelEditor.LevelDurationEditor);
             foreach (LevelHoldContainer hold in LevelEditor.LevelHolds)
             {
                 if (EditorTriggerTime > hold.EditorTriggerTime)
                 {
-                    //TODO: match position to cursor position better
-                    //  using EditorTriggerTime as tbe base and subtracting holds back out of TriggerTime caused flickering in commands that caused level scroll cache rebuilds
-                    //  maybe that's fixable, but it might just be easier to hack it from this direction instead
-                    EditorTriggerTime += LevelEditor.EditorHoldDelay;
                     if (EditorTriggerTime < hold.EditorTriggerTime + LevelEditor.EditorHoldDelay)
                     {
-                        EditorTriggerTime = hold.EditorTriggerTime + LevelEditor.EditorHoldDelay + CommandAfterHoldOffset;
+                        TriggerTime = hold.TriggerTime;
+                        EditorTriggerTime = hold.EditorTriggerTime;
+                    }
+                    else
+                    {
+                        TriggerTime -= LevelEditor.EditorHoldDelay;
                     }
                 }
             }
@@ -257,6 +258,14 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         {
             base.AddVisualsToTimeline();
             obj.AddComponent<RawImage>().color = LevelEditor.current.TimelineHoldColor;
+            Image image = new GameObject().AddComponent<Image>();
+            image.transform.SetParent(rect, false);
+            RectTransform r = image.gameObject.GetComponent<RectTransform>();
+            r.offsetMin = r.offsetMax = r.anchorMin = Vector2.zero;
+            r.anchorMax = Vector2.one;
+            image.sprite = LevelEditor.current.imageCommandFrame;
+            image.type = Image.Type.Sliced;
+            image.color = Color.black;
         }
     }
 
@@ -291,7 +300,56 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public override void DragTimeline(PointerEventData data)
         {
             base.DragTimeline(data);
+
+            float HighPosition = EditorTriggerTime;
+            float LowPosition = EditorTriggerTime;
+
+            float HighPositionReal = TriggerTime;
+            foreach(ScrollSpeedContainer container in LevelEditor.ScrollSpeeds)
+            {
+                if (IntersectsWithScroll(HighPosition, container))
+                {
+                    HighPosition = container.EditorTriggerTime + container.LerpTime;
+
+                    HighPositionReal = container.TriggerTime + container.LerpTime;
+                }
+            }
+
+            if (HighPosition != EditorTriggerTime)
+            {
+                //if we're intersecting with another lerp and needed to move, run the series the other way to see if we can find a valid spot closer to the cursor
+                float LowPositionReal = TriggerTime;
+                for (int i = LevelEditor.ScrollSpeeds.Count - 1; i >= 0; i--)
+                {
+                    if (IntersectsWithScroll(LowPosition, LevelEditor.ScrollSpeeds[i]))
+                    {
+                        LowPosition = LevelEditor.ScrollSpeeds[i].EditorTriggerTime - LerpTime;
+                        LowPositionReal = LevelEditor.ScrollSpeeds[i].TriggerTime - LerpTime;
+                    }
+                }
+                if (Mathf.Abs(HighPosition - EditorTriggerTime) > Mathf.Abs(LowPosition - EditorTriggerTime))
+                {
+                    EditorTriggerTime = LowPosition;
+                    TriggerTime = LowPositionReal;
+                }
+                else
+                {
+                    EditorTriggerTime = HighPosition;
+                    TriggerTime = HighPositionReal;
+                }
+                //TODO: weird behavior when snapping through a level hold (RebuildScrollSpeedCache resyncs TriggerTime and EditorTriggerTime, snapping to slightly after the hold instead of right at the end of it)
+                //  probably snaps to X time after the hold, where X is the amount of overlap the previous scrollspeed overlaps the start of the hold
+                
+            }
+
             LevelEditor.RebuildScrollSpeedCache();
+
+            bool IntersectsWithScroll(float InputTime, ScrollSpeedContainer container)
+            {
+                return container != this &&
+                    ((InputTime <= container.EditorTriggerTime && InputTime + LerpTime >= container.EditorTriggerTime) ||
+                    (InputTime >= container.EditorTriggerTime && InputTime <= container.EditorTriggerTime + container.LerpTime));
+            }
         }
 
         public override void AddVisualsToTimeline()
@@ -326,8 +384,10 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
             UpdateTimelineVisuals();
 
-            Destroy(obj.GetComponent<RawImage>());
-
+            Image image = obj.AddComponent<Image>();
+            image.sprite = LevelEditor.current.imageCommandFrame;
+            image.type = Image.Type.Sliced;
+            image.color = LevelEditor.current.ScrollSpeedNodeColor;
         }
 
         public override void UpdateTimelineVisuals()

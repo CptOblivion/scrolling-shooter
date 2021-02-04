@@ -20,9 +20,7 @@ public class LevelEditor : MonoBehaviour
         }
     }
 
-    public static float DragScale = .1f;
-    public static float ScrollZoom = 1;
-    public static float ScrollZoomOffset = 0; //might not need
+    public static float CommandDragScale = .1f;
 
     public Text scrollTimeReadout;
     public Text activeSelectionName;
@@ -38,8 +36,12 @@ public class LevelEditor : MonoBehaviour
 
     public RectTransform UILinesLayer;
     public TextAsset Level;
-    public Scrollbar levelScroll;
+    public Scrollbar scrollLevel;
+    public Scrollbar scrollTimelineZoom;
     public RectTransform commandsTrack;
+    public Vector2 commandsTrackTopAndBottom = Vector2.zero;
+    public static float timelineZoom = 1;
+    public float timelineZoomMax = 4;
     public static float LevelLength;
     public static float LevelDurationEditor = 0;
     public static float LevelDuration = 0;
@@ -63,6 +65,7 @@ public class LevelEditor : MonoBehaviour
     public Color MultipleChildLineColor = Color.red / 2;
     public Color CommandLineSelectedColor = Color.white;
     public Texture imageScrollSpeedLerp;
+    public Sprite imageCommandFrame;
     public float TailLength = 40;
 
     int WindowResizeStage = 0;
@@ -100,12 +103,14 @@ public class LevelEditor : MonoBehaviour
     private void OnEnable()
     {
         GlobalTools.Mode = GlobalTools.GameModes.Editor;
-        levelScroll.onValueChanged.AddListener(UpdateLevelScroll);
+        scrollLevel.onValueChanged.AddListener(UpdateLevelScroll);
+        scrollTimelineZoom.onValueChanged.AddListener(UpdateTimelineZoom);
         UIShowSpawnLines.onValueChanged.AddListener(UpdateUILines);
     }
     private void OnDisable()
     {
-        levelScroll.onValueChanged.RemoveListener(UpdateLevelScroll);
+        scrollLevel.onValueChanged.RemoveListener(UpdateLevelScroll);
+        scrollTimelineZoom.onValueChanged.RemoveListener(UpdateTimelineZoom);
         UIShowSpawnLines.onValueChanged.RemoveListener(UpdateUILines);
     }
 
@@ -196,14 +201,15 @@ public class LevelEditor : MonoBehaviour
             switch (line.Command)
             {
                 case LevelParser.AvailableCommands.ScrollSpeed:
-                    float LerpTime = 0;
+                    float LerpTime = .001f;
                     GetNextArgument();
                     float NewSpeed = float.Parse(val);
                     while (GetNextArgument())
                     {
                         if (arg == "Lerp")
                         {
-                            LerpTime = float.Parse(val);
+                            //for interface stability reasons, LerpTime shouldn't hit actual 0
+                            LerpTime = Mathf.Max(float.Parse(val), LerpTime);
                         }
                     }
                     GameObject newScrollOb = new GameObject();
@@ -515,8 +521,21 @@ public class LevelEditor : MonoBehaviour
         current.UpdateLevelScroll(EditorTime / LevelDurationEditor, container);
     }
 
+    void UpdateTimelineZoom(float f)
+    {
+        timelineZoom = 1 + (f * (timelineZoomMax-1));
+        UpdateCommandsTrackSize();
+        UpdateLevelScroll(EditorTime/LevelDurationEditor);
+        //TODO: update line tail positions relative to timeline ends
+    }
+
     void UpdateLevelScroll(float f)
     {
+        commandsTrack.anchorMax = new Vector2(commandsTrack.anchorMax.x, (1 - f) * (timelineZoom-1) + 1);
+        commandsTrack.anchorMin = new Vector2(commandsTrack.anchorMin.x, commandsTrack.anchorMax.y-timelineZoom);
+
+        commandsTrackTopAndBottom = new Vector2(commandsTrack.parent.TransformPoint(commandsTrack.rect.min + (Vector2)commandsTrack.localPosition).y,
+            commandsTrack.parent.TransformPoint(commandsTrack.rect.max + (Vector2)commandsTrack.localPosition).y);
         UpdateLevelScroll(f, null);
     }
     void UpdateLevelScroll(float f, LevelEditorSpawnedCommand.LevelPositionalContainer individualContainer)
@@ -866,7 +885,9 @@ public class LevelEditor : MonoBehaviour
                 cam.orthographicSize *= LevelWidth / FrameOffsets.x;
             }
             WindowResizeStage++;
-            UpdateUILines();
+            //UpdateUILines();
+            UpdateCommandsTrackSize();
+            UpdateLevelScroll(scrollLevel.value);
             return true;
         }
 
@@ -878,16 +899,19 @@ public class LevelEditor : MonoBehaviour
                 (CurrentCorners[2].x + CurrentCorners[0].x) / 2,
                 (CurrentCorners[2].y + CurrentCorners[0].y) / 2);
             WindowResizeStage++;
-            UpdateUILines();
+            //UpdateUILines();
+            UpdateCommandsTrackSize();
+            UpdateLevelScroll(scrollLevel.value);
             return true;
         }
         if (WindowResizeStage == 2)
         {
-            UpdateUILines();
+            //UpdateUILines();
             WindowResizeStage++;
+            UpdateCommandsTrackSize();
+            UpdateLevelScroll(scrollLevel.value);
         }
 
-        UpdateCommandsTrackSize();
         return false;
     }
     void UpdateLevelLength()
@@ -895,14 +919,15 @@ public class LevelEditor : MonoBehaviour
         LevelLength = GetDistanceTraveledAtTime(LevelDurationEditor);
 
         //TODO: should I just make the scroll bar a constant size?
-        levelScroll.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
+        scrollLevel.size = Mathf.Max(ScreenHeight / LevelLength, .05f);
         UpdateCommandsTrackSize();
     }
 
     void UpdateCommandsTrackSize()
     {
-        commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -levelScroll.handleRect.rect.height / 2);
-        commandsTrack.offsetMin = new Vector2(commandsTrack.offsetMin.x, levelScroll.handleRect.rect.height / 2);
+        commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -scrollLevel.handleRect.rect.height / 2);
+        commandsTrack.offsetMin = new Vector2(commandsTrack.offsetMin.x, scrollLevel.handleRect.rect.height / 2);
+        CommandDragScale = commandsTrack.rect.height;
     }
 
     static float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
@@ -923,7 +948,7 @@ public class LevelEditor : MonoBehaviour
 
     void UpdateUILine(LevelEditorSpawnedCommand.LevelPositionalContainer container)
     {
-        float VertPos = (container.EditorTriggerTime / LevelDurationEditor * (1 - levelScroll.size) + levelScroll.size / 2) * ScreenHeight - ScreenHeight / 2;
+        float VertPos = Mathf.Lerp(commandsTrackTopAndBottom.x, commandsTrackTopAndBottom.y, container.EditorTriggerTime / LevelDurationEditor);
         UpdateUISubLine(container, new Vector3(LevelWidth / 2, VertPos));
 
         if (container.CommandType == LevelParser.AvailableCommands.Spawn)

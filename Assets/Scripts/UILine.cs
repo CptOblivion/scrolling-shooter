@@ -96,8 +96,6 @@ public class UILine : MonoBehaviour
             transform.rotation = Quaternion.LookRotation(vec, Vector3.forward);
             transform.Rotate(new Vector3(90, 0,0), Space.Self);
         }
-        //TODO: length should factor in canvas scale
-
 
         transform.localScale = new Vector3(1,vec.magnitude/ScaleFactor);
     }
