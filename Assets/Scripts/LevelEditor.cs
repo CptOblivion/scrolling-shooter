@@ -47,12 +47,14 @@ public class LevelEditor : MonoBehaviour
     public static float LevelLength;
     public static float LevelDurationEditor = 0;
     public static float LevelDuration = 0;
+    public Canvas canvasEditor;
+    CanvasScaler canvasEditorScaler;
 
     public static LevelEditorSpawnedCommand ActiveCommand = null;
     public static readonly List<LevelEditorSpawnedCommand> SelectedCommands = new List<LevelEditorSpawnedCommand>();
 
     public static readonly float ScreenHeight = 48;
-    readonly float LevelWidth = 96;
+    public static readonly float LevelWidth = 96;
     public float ScrollPosition;
     public List<LevelParser.LevelLine> LevelParsed = new List<LevelParser.LevelLine>();
     public Toggle UIShowSpawnLines;
@@ -100,6 +102,7 @@ public class LevelEditor : MonoBehaviour
         cam = GetComponent<Camera>();
         mousePos = actionMapUI.FindAction("Point");
         leftClick = actionMapUI.FindAction("Click");
+        canvasEditorScaler = canvasEditor.GetComponent<CanvasScaler>();
     }
 
     private void OnEnable()
@@ -156,6 +159,7 @@ public class LevelEditor : MonoBehaviour
 
                 break;
             case States.Editing:
+                //TODO: Disabled window resize stuff here, check if it needs to go back in
                 if (Screen.width != OldWindowSize.x || Screen.height != OldWindowSize.y)
                 {
                     WindowResizeStage = 0;
@@ -502,7 +506,7 @@ public class LevelEditor : MonoBehaviour
             ActiveCommand.Deselect();
         }
         ActiveCommand = commandOb;
-        ActiveCommand.Select();
+        ActiveCommand.command.Select();
         //current.activeSelectionName.text = $"Ob: {commandOb.command.obj.name} \n Line {commandOb.command.CommandIndex}";
         //TODO: f we're holding shift or ctrl and there's currently an active selected command, add commandOb to selectedCommands
     }
@@ -571,6 +575,7 @@ public class LevelEditor : MonoBehaviour
             }
             UpdateUILines();
         }
+        EditorCommandPropertiesPanel.UpdatePanelPosition();
 
 
         void UpdateContainer(LevelEditorSpawnedCommand.LevelPositionalContainer container)
@@ -873,52 +878,72 @@ public class LevelEditor : MonoBehaviour
     }
     bool UpdateWindowShape()
     {
-        if (WindowResizeStage == 0)
+        Vector3[] CurrentCorners;
+        //the UI takes a frame to actually report correct numbers after a change, so we have to do things in stages after a window resize
+        //TODO: maybe we can move this to OnGUI to get immediate updates on changes
+        switch (WindowResizeStage)
         {
-            //bottom left, top left, top right, bottom right
-            Vector3[] CurrentCorners = new Vector3[4];
-            ShowLevelFrame.GetWorldCorners(CurrentCorners);
-            float ratio = LevelWidth / ScreenHeight;
-            Vector2 FrameOffsets = new Vector2((CurrentCorners[2].x - CurrentCorners[0].x), (CurrentCorners[2].y - CurrentCorners[0].y));
+            case 0:
+                UpdateCanvasScaler();
+                WindowResizeStage++;
+                break;
+            case 1:
+                UpdateCanvasScaler();
+                //bottom left, top left, top right, bottom right
+                CurrentCorners = new Vector3[4];
+                ShowLevelFrame.GetWorldCorners(CurrentCorners);
+                float ratio = LevelWidth / ScreenHeight;
+                Vector2 FrameOffsets = new Vector2((CurrentCorners[2].x - CurrentCorners[0].x), (CurrentCorners[2].y - CurrentCorners[0].y));
 
-            if (FrameOffsets.x / FrameOffsets.y > ratio)
-            {
-                cam.orthographicSize *= ScreenHeight / FrameOffsets.y;
-            }
-            else
-            {
-                cam.orthographicSize *= LevelWidth / FrameOffsets.x;
-            }
-            WindowResizeStage++;
-            //UpdateUILines();
-            UpdateCommandsTrackSize();
-            UpdateLevelScroll(scrollLevel.value);
-            return true;
-        }
-
-        if (WindowResizeStage == 1)
-        {
-            Vector3[] CurrentCorners = new Vector3[4];
-            ShowLevelFrame.GetWorldCorners(CurrentCorners);
-            transform.position -= new Vector3(
-                (CurrentCorners[2].x + CurrentCorners[0].x) / 2,
-                (CurrentCorners[2].y + CurrentCorners[0].y) / 2);
-            WindowResizeStage++;
-            //UpdateUILines();
-            UpdateCommandsTrackSize();
-            UpdateLevelScroll(scrollLevel.value);
-            return true;
-        }
-        if (WindowResizeStage == 2)
-        {
-            //UpdateUILines();
-            WindowResizeStage++;
-            UpdateCommandsTrackSize();
-            UpdateLevelScroll(scrollLevel.value);
+                if (FrameOffsets.x / FrameOffsets.y > ratio)
+                {
+                    cam.orthographicSize *= ScreenHeight / FrameOffsets.y;
+                }
+                else
+                {
+                    cam.orthographicSize *= LevelWidth / FrameOffsets.x;
+                }
+                WindowResizeStage++;
+                //UpdateUILines();
+                UpdateCommandsTrackSize();
+                UpdateLevelScroll(scrollLevel.value);
+                return true;
+            case 2:
+                //UpdateCanvasScaler();
+                CurrentCorners = new Vector3[4];
+                ShowLevelFrame.GetWorldCorners(CurrentCorners);
+                transform.position -= new Vector3(
+                    (CurrentCorners[2].x + CurrentCorners[0].x) / 2,
+                    (CurrentCorners[2].y + CurrentCorners[0].y) / 2);
+                WindowResizeStage++;
+                //UpdateUILines();
+                UpdateCommandsTrackSize();
+                UpdateLevelScroll(scrollLevel.value);
+                return true;
+            case 3:
+                //UpdateUILines();
+                WindowResizeStage++;
+                //UpdateCanvasScaler();
+                UpdateCommandsTrackSize();
+                UpdateLevelScroll(scrollLevel.value);
+                break;
         }
 
         return false;
+
+        void UpdateCanvasScaler()
+        {
+            if (((float)Screen.width) / Screen.height < 16.0 / 9)
+            {
+                canvasEditorScaler.scaleFactor = ((float)Screen.width) / 1920;
+            }
+            else
+            {
+                canvasEditorScaler.scaleFactor = ((float)Screen.height) / 1080;
+            }
+        }
     }
+
     void UpdateLevelLength()
     {
         LevelLength = GetDistanceTraveledAtTime(LevelDurationEditor);
@@ -932,7 +957,7 @@ public class LevelEditor : MonoBehaviour
     {
         commandsTrack.offsetMax = new Vector2(commandsTrack.offsetMax.x, -scrollLevel.handleRect.rect.height / 2);
         commandsTrack.offsetMin = new Vector2(commandsTrack.offsetMin.x, scrollLevel.handleRect.rect.height / 2);
-        CommandDragScale = commandsTrack.rect.height;
+        CommandDragScale = commandsTrack.rect.height * canvasEditorScaler.scaleFactor;
     }
 
     static float AreaUnderLerp(float StartSpeed, float EndSpeed, float LerpTime)
@@ -951,9 +976,14 @@ public class LevelEditor : MonoBehaviour
         
     }
 
+    public static float GetTimelinePosition(float f)
+    {
+        return Mathf.Lerp(current.commandsTrackTopAndBottom.x, current.commandsTrackTopAndBottom.y, f / LevelDurationEditor);
+    }
+
     void UpdateUILine(LevelEditorSpawnedCommand.LevelPositionalContainer container)
     {
-        float VertPos = Mathf.Lerp(commandsTrackTopAndBottom.x, commandsTrackTopAndBottom.y, container.EditorTriggerTime / LevelDurationEditor);
+        float VertPos = GetTimelinePosition(container.EditorTriggerTime);
         UpdateUISubLine(container, new Vector3(LevelWidth / 2, VertPos));
 
         if (container.CommandType == LevelParser.AvailableCommands.Spawn)

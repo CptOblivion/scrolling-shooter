@@ -36,7 +36,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         }
         public virtual void SummonPropertiesPanel()
         {
-            EditorCommandPropertiesPanel.CallPanel(EditorTriggerTime);
+            EditorCommandPropertiesPanel.CallPanel("Unknown command", this);
         }
 
         public virtual void HoverEnter()
@@ -327,13 +327,16 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public override void SummonPropertiesPanel()
         {
             base.SummonPropertiesPanel();
+            EditorCommandPropertiesPanel.SetTitle("Set Scroll Speed");
             EditorUIControls.EditorUISlider newSlider;
             newSlider = EditorCommandPropertiesPanel.Layout.AddSlider("New Speed", 0, LevelEditor.TempMaxScrollSpeed, false);
             newSlider.slider.onValueChanged.AddListener(SetSpeed);
             newSlider.slider.value = NewSpeed;
-            newSlider = EditorCommandPropertiesPanel.Layout.AddSlider("Lerp Time", 0, 20, false);
+            newSlider = EditorCommandPropertiesPanel.Layout.AddSlider("Lerp Time", 0, 5, false);
             newSlider.slider.onValueChanged.AddListener(SetLerp);
             newSlider.slider.value = LerpTime;
+
+            EditorCommandPropertiesPanel.Layout.FinalizeLayout();
         }
 
         void SetSpeed(float f)
@@ -360,6 +363,8 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
         void AvoidCollisions()
         {
+            //TODO: clamp so we can't be pushed out the bottom or top of the timeline
+            //TODO: case for there's no valid space to put this
             float HighPosition = EditorTriggerTime;
             float LowPosition = EditorTriggerTime;
 
@@ -396,8 +401,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                     EditorTriggerTime = HighPosition;
                     TriggerTime = HighPositionReal;
                 }
-                //TODO: weird behavior when snapping through a level hold (RebuildScrollSpeedCache resyncs TriggerTime and EditorTriggerTime, snapping to slightly after the hold instead of right at the end of it)
-                //  probably snaps to X time after the hold, where X is the amount of overlap the previous scrollspeed overlaps the start of the hold
+                //TODO: block overlap with level holds as well
 
             }
 
@@ -531,6 +535,12 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             InstantiateBase(gameObject, startPosition, triggerTime, editorTime, triggerPos);
         }
 
+        public override void SummonPropertiesPanel()
+        {
+            base.SummonPropertiesPanel();
+            EditorCommandPropertiesPanel.SetTitle("Spawn object");
+        }
+
         protected override void InstantiateBase(GameObject gameObject, Vector3 startPosition, float triggerTime, float editorTime, float triggerPos)
         {
             base.InstantiateBase(gameObject, startPosition, triggerTime, editorTime, triggerPos);
@@ -612,6 +622,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
     //public SpawnedObjectContainer command;
     public CommandContainer command;
+    bool Hovered = false;
 
     private void Awake()
     {
@@ -623,31 +634,30 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
     public void OnPointerEnter(PointerEventData data)
     {
-        HoverEnter();
+        if (!data.dragging)
+        {
+            command.HoverEnter();
+        }
     }
     public void OnPointerExit(PointerEventData data)
     {
-        HoverExit();
+        if (!data.dragging)
+        {
+            command.HoverExit();
+        }
     }
 
     public void OnPointerClick(PointerEventData data)
     {
-        LevelEditor.SelectCommand(this);
-    }
-
-
-    public void HoverEnter()
-    {
-        command.HoverEnter();
-    }
-    public void HoverExit()
-    {
-        command.HoverExit();
+        if (!data.dragging)
+        {
+            Select();
+        }
     }
 
     public void Select()
     {
-        command.Select();
+        LevelEditor.SelectCommand(this);
     }
 
     public void Deselect()

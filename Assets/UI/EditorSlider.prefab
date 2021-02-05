@@ -86,6 +86,7 @@ GameObject:
   - component: {fileID: 8912194808773740152}
   - component: {fileID: 8912194808773740038}
   - component: {fileID: 8912194808773740153}
+  - component: {fileID: -5580982659940622609}
   m_Layer: 5
   m_Name: EditorSlider
   m_TagString: Untagged
@@ -143,6 +144,26 @@ MonoBehaviour:
   type: 0
   label: {fileID: 8912194809205079359}
   slider: {fileID: 8912194809199962344}
+--- !u!114 &-5580982659940622609
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8912194808773740155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IgnoreLayout: 0
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: -1
+  m_PreferredHeight: 20
+  m_FlexibleWidth: -1
+  m_FlexibleHeight: -1
+  m_LayoutPriority: 1
 --- !u!1 &8912194808810955877
 GameObject:
   m_ObjectHideFlags: 0
@@ -413,7 +434,7 @@ MonoBehaviour:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
     m_FontSize: 14
     m_FontStyle: 0
-    m_BestFit: 0
+    m_BestFit: 1
     m_MinSize: 10
     m_MaxSize: 40
     m_Alignment: 0

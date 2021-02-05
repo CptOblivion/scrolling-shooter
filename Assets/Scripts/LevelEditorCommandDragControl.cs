@@ -29,6 +29,11 @@ public class LevelEditorCommandDragControl : MonoBehaviour, IPointerDownHandler,
     }
     public void OnBeginDrag(PointerEventData data)
     {
+        LevelEditorSpawnedCommand commandComponent = GetComponent<LevelEditorSpawnedCommand>();
+        if (commandComponent)
+        {
+            commandComponent.Select();
+        }
         switch (ControlInput)
         {
             case ControlInputs.SpawnTime:

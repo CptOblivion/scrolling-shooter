@@ -6,9 +6,11 @@ using UnityEngine.InputSystem;
 
 public class EditorCommandPropertiesPanel : MonoBehaviour
 {
+    public float PivotOffset = .1f;
     public static EditorCommandPropertiesPanel current;
-    static Vector2? PositionSpace = null;
-    static float? PositionTime = null;
+    public Text title;
+    public RectTransform FlexibleSpace;
+    static LevelEditorSpawnedCommand.CommandContainer command = null;
 
     public VerticalLayoutGroup contents;
     static VerticalLayoutGroup newContents;
@@ -19,55 +21,78 @@ public class EditorCommandPropertiesPanel : MonoBehaviour
     public EditorUIControls.EditorUIToggle prefabToggle;
     public EditorUIControls.EditorUIInputField prefabInputField;
 
+    static RectTransform parentRect;
+    static RectTransform currentRect;
+
     void Awake()
     {
         current = this;
+        currentRect = (RectTransform)transform;
+        parentRect = (RectTransform)transform.parent;
         newContents = Instantiate(contents, transform);
         contents.gameObject.SetActive(false);
     }
-
-    public static void CallPanel(Vector2 position)
+    public static void CallPanel(string Title, LevelEditorSpawnedCommand.CommandContainer Command)
     {
+        current.title.text = Title;
         ClearPanel();
         current.gameObject.SetActive(true);
-        PositionSpace = position;
-        PositionTime = null;
-        UpdatePanelPosition();
-    }
-    public static void CallPanel(float time)
-    {
-        ClearPanel();
-        current.gameObject.SetActive(true);
-        PositionTime = time;
-        PositionSpace = null;
+        command = Command;
         UpdatePanelPosition();
     }
 
     public static void ClearPanel()
     {
         Layout.NestedLayouts.Clear();
+        current.FlexibleSpace.SetParent(current.transform);
         Destroy(newContents.gameObject);
         //destroying and then re-instantiating the contents object gets around the vertical layout component throwing errors when children are destroyed
         newContents = Instantiate(current.contents, current.transform);
+        current.FlexibleSpace.SetParent(newContents.transform);
         newContents.gameObject.SetActive(true);
     }
     public static void DismissPanel()
     {
         current.gameObject.SetActive(false);
     }
+    public static void SetTitle(string Title)
+    {
+        current.title.text = Title;
+    }
     public static void UpdatePanelPosition()
     {
-        if (PositionSpace != null)
+        if (current.gameObject.activeInHierarchy)
         {
-            current.transform.position = (Vector3)PositionSpace;
+            LevelEditorSpawnedCommand.LevelPositionalContainer posCommand = command as LevelEditorSpawnedCommand.LevelPositionalContainer;
+            if (posCommand != null && posCommand.obj.activeInHierarchy)
+            {
+                current.transform.position = posCommand.obj.transform.position;
+            }
+            else
+            {
+                current.transform.position = new Vector3(LevelEditor.LevelWidth / 2, LevelEditor.GetTimelinePosition(command.EditorTriggerTime), 0);
+            }
+
+            Vector3 LocalPos = current.transform.localPosition;
+
+
+
+            LocalPos = new Vector3(Mathf.Clamp(LocalPos.x ,- parentRect.rect.width/2, parentRect.rect.width / 2),
+                Mathf.Clamp(LocalPos.y , - parentRect.rect.height / 2, parentRect.rect.height / 2), 0);
+
+            Vector2 Pivot = new Vector2(-current.PivotOffset, -current.PivotOffset);
+
+            if (LocalPos.x > 0)
+            {
+                Pivot.x = 1 + current.PivotOffset;
+            }
+            if (LocalPos.y > 0)
+            {
+                Pivot.y = 1 + current.PivotOffset;
+            }
+            currentRect.pivot = Pivot;
+            current.transform.localPosition = LocalPos;
         }
-        else
-        {
-            //TODO: get position on (or off) screen that corresponds to the time on the timeline
-        }
-        //TODO: clamp position to level view window
-        //TODO: change pivot based on which edges we're closest to
-        //TODO: scale panel based on window size
     }
     public class Layout
     {
@@ -115,7 +140,7 @@ public class EditorCommandPropertiesPanel : MonoBehaviour
         public static EditorUIControls.EditorUISlider AddSlider(string label, float min, float max, bool IsInt)
         {
             RectTransform parent = (RectTransform)newContents.transform;
-            if (NestedLayouts.Count > 0) parent = NestedLayouts[0];
+            if (NestedLayouts.Count > 0)parent = NestedLayouts[0];
             EditorUIControls.EditorUISlider newSlider = Instantiate(current.prefabSlider, parent);
             newSlider.label.text = label;
             newSlider.slider.minValue = min;
@@ -137,6 +162,15 @@ public class EditorCommandPropertiesPanel : MonoBehaviour
             EditorUIControls.EditorUIInputField newInputField = Instantiate(current.prefabInputField, parent);
             newInputField.label.text = label;
             return newInputField;
+        }
+        public static void FinalizeLayout()
+        {
+            current.FlexibleSpace.SetAsLastSibling();
+            if (NestedLayouts.Count > 0)
+            {
+                Debug.LogWarning("Didn't close all horizontal and vertical groups, careful with that!");
+            }
+            //TODO: re-scale panel based on size of contents
         }
     }
 }
