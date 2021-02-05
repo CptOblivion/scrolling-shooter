@@ -20,6 +20,8 @@ public class LevelEditor : MonoBehaviour
         }
     }
 
+    public static float TempMaxScrollSpeed = 40;
+
     public static float CommandDragScale = .1f;
 
     public Text scrollTimeReadout;
@@ -31,7 +33,7 @@ public class LevelEditor : MonoBehaviour
     InputAction leftClick;
     static readonly List<ScrollSpeedChange> ScrollSpeedCache = new List<ScrollSpeedChange>();
 
-    enum States {NoLevel, Loading, Editing, Testing}
+    enum States {Startup, NoLevel, Loading, Editing, Testing}
     public static float EditorTime = 0;
 
     public RectTransform UILinesLayer;
@@ -79,7 +81,7 @@ public class LevelEditor : MonoBehaviour
 
     readonly Dictionary<string, ResourceRequest> LoadAssets = new Dictionary<string, ResourceRequest>();
 
-    States state = States.NoLevel;
+    States state = States.Startup;
 
     public static readonly float EditorHoldDelay = 5;
 
@@ -118,7 +120,12 @@ public class LevelEditor : MonoBehaviour
     {
         switch (state)
         {
+            case States.Startup:
+                state = States.NoLevel;
+                EditorCommandPropertiesPanel.DismissPanel();
+                goto SkipToNoLevel;
             case States.NoLevel:
+                SkipToNoLevel:
                 if (Level != null)
                 {
                     LevelParsed = LevelParser.ParseFile(Level, out List<string> PathsToLoad);
@@ -127,11 +134,11 @@ public class LevelEditor : MonoBehaviour
                         LoadAssets.Add(assetPath, Resources.LoadAsync(assetPath));
                     }
                     state = States.Loading;
-                    goto StartLoading; //no need to wait a frame for the switch to come back around
+                    goto SkipToStartLoading; //no need to wait a frame for the switch to come back around
                 }
                 break;
             case States.Loading:
-                StartLoading:
+                SkipToStartLoading:
                 bool DoneLoading = true;
                 foreach (ResourceRequest loadAsset in LoadAssets.Values)
                 {
@@ -244,8 +251,7 @@ public class LevelEditor : MonoBehaviour
                         GameObject newHoldOb = new GameObject();
 
                         LevelEditorSpawnedCommand.LevelHoldContainer newHoldCommand = new LevelEditorSpawnedCommand.LevelHoldContainer(newHoldOb, CurrentCommandIndex, TempTime-TempHoldTime, TempTime);
-                        LevelEditorSpawnedCommand newHoldComponent = newHoldOb.AddComponent<LevelEditorSpawnedCommand>();
-                        newHoldComponent.command = newHoldCommand;
+                        LevelEditorSpawnedCommand newHoldComponent = newHoldOb.GetComponent<LevelEditorSpawnedCommand>();
                         LevelHolds.Add(newHoldCommand);
                         newHoldCommand.AddTimeCollider();
                         TempHoldTime += EditorHoldDelay;
@@ -267,7 +273,6 @@ public class LevelEditor : MonoBehaviour
 
                     LevelEditorSpawnedCommand.SpawnedObjectContainer newContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(newSpawnedOb, CurrentCommandIndex, SpawnPosition, TempTime - TempHoldTime, TempTime, TempPosition);
                     SpawnedObjects.Add(newContainer);
-                    newSpawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newContainer;
                     newContainer.line = UILine.NewLine(UILineWidth, UILinesLayer);
                     newContainer.line.SetTail(TailLength);
                     newContainer.AddTimeCollider(newContainer.line.tail.gameObject);
@@ -340,11 +345,10 @@ public class LevelEditor : MonoBehaviour
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity, spawner.transform);
                             else
                                 spawnedOb = Instantiate(spawner.spawn, spawnPos, Quaternion.identity);
-                            spawnedOb.gameObject.AddComponent<LevelEditorSpawnedCommand>().command = newContainer;
                             //TODO: handle animation (or just strip that option from the spawner class, that might be better)
 
                             LevelEditorSpawnedCommand.SpawnedObjectContainer newChildContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(spawnedOb, spawnedOb.transform.position, -1, SpawnerTimer + TempTime, SpawnerDistance + TempPosition);
-
+                            spawnedOb.GetComponent<LevelEditorSpawnedCommand>().command = newContainer;
                             tempSpawnerChildren.Add(newChildContainer);
 
                             newChildContainer.TriggerOffsetTime = SpawnerTimer;
@@ -393,11 +397,12 @@ public class LevelEditor : MonoBehaviour
                                 child.transform.position += new Vector3(0, multipleOffset * i, 0);
                             }
 
-                            child.GetComponent<LevelEditorSpawnedCommand>().command = newContainer; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
 
                             float childTime = (multipleDelay * i);
                             LevelEditorSpawnedCommand.SpawnedObjectContainer newChildContainer = new LevelEditorSpawnedCommand.SpawnedObjectContainer(child, child.transform.position, -1, TempTime + childTime, GetDistanceTraveledAtTime(childTime));
                             
+                            child.GetComponent<LevelEditorSpawnedCommand>().command = newContainer; //the object we cloned already has this component, but in the cloning it seems like the component loses its pointer so point it back at the same thing again
+
                             newContainer.SpawnerChildren[i - 1] = newChildContainer;
 
                             newChildContainer.TriggerOffsetTime = childTime;
@@ -723,7 +728,7 @@ public class LevelEditor : MonoBehaviour
         int HoldIndex = 0;
         int ScrollSpeedIndex = 0;
 
-        int SortByTriggerTime(LevelEditorSpawnedCommand.CommandContainer x, LevelEditorSpawnedCommand.CommandContainer y)
+        static int SortByTriggerTime(LevelEditorSpawnedCommand.CommandContainer x, LevelEditorSpawnedCommand.CommandContainer y)
         {
             if (x.TriggerTime > y.TriggerTime) return 1;
             if (x.TriggerTime < y.TriggerTime) return -1;
@@ -963,7 +968,7 @@ public class LevelEditor : MonoBehaviour
             }
         }
 
-        void UpdateUISubLine(LevelEditorSpawnedCommand.LevelPositionalContainer container, Vector3 target)
+        static void UpdateUISubLine(LevelEditorSpawnedCommand.LevelPositionalContainer container, Vector3 target)
         {
             if (container.line)
             {

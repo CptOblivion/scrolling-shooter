@@ -26,6 +26,19 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         //public bool Hovered { get; private set; } = false;
         public bool Selected { get; private set; } = false;
 
+        protected virtual void InstantiateBase()
+        {
+            LevelEditorSpawnedCommand com = obj.GetComponent<LevelEditorSpawnedCommand>();
+            if (com)
+                com.command = this;
+            else
+                obj.AddComponent<LevelEditorSpawnedCommand>().command = this;
+        }
+        public virtual void SummonPropertiesPanel()
+        {
+            EditorCommandPropertiesPanel.CallPanel(EditorTriggerTime);
+        }
+
         public virtual void HoverEnter()
         {
             if (!Selected)
@@ -45,11 +58,13 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         {
             Selected = true;
             SetVisualsSelected();
+            SummonPropertiesPanel();
         }
         public virtual void Deselect()
         {
             Selected = false;
             SetVisualsIdle();
+            EditorCommandPropertiesPanel.DismissPanel();
         }
         public virtual void SetVisualsIdle()
         {
@@ -106,8 +121,6 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                 }
             }
             UpdateTime();
-            
-
         }
         public virtual void EndDragTimeline(PointerEventData data)
         {
@@ -172,6 +185,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             TriggerPosition = triggerPos;
             Life = -1;
             CommandType = LevelParser.AvailableCommands.Spawn;
+            base.InstantiateBase();
         }
 
         public override void SetVisualsHovered()
@@ -232,6 +246,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
     public class LevelHoldContainer : CommandContainer
     {
         public float DelayPreview = 5;
+        public Image imageBorder;
         public LevelHoldContainer(GameObject ob, int commandIndex, float triggerTime, float editorTime)
         {
             CommandType = LevelParser.AvailableCommands.HoldForDeath;
@@ -239,6 +254,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             TriggerTime = triggerTime;
             EditorTriggerTime = editorTime;
             obj = ob;
+            InstantiateBase();
         }
         public override void DragTimeline(PointerEventData data)
         {
@@ -258,14 +274,29 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         {
             base.AddVisualsToTimeline();
             obj.AddComponent<RawImage>().color = LevelEditor.current.TimelineHoldColor;
-            Image image = new GameObject().AddComponent<Image>();
-            image.transform.SetParent(rect, false);
-            RectTransform r = image.gameObject.GetComponent<RectTransform>();
+            imageBorder = new GameObject().AddComponent<Image>();
+            imageBorder.transform.SetParent(rect, false);
+            RectTransform r = imageBorder.gameObject.GetComponent<RectTransform>();
             r.offsetMin = r.offsetMax = r.anchorMin = Vector2.zero;
             r.anchorMax = Vector2.one;
-            image.sprite = LevelEditor.current.imageCommandFrame;
-            image.type = Image.Type.Sliced;
-            image.color = Color.black;
+            imageBorder.sprite = LevelEditor.current.imageCommandFrame;
+            imageBorder.type = Image.Type.Sliced;
+            SetVisualsIdle();
+        }
+        public override void SetVisualsIdle()
+        {
+            base.SetVisualsIdle();
+            imageBorder.color = Color.black;
+        }
+        public override void SetVisualsHovered()
+        {
+            base.SetVisualsHovered();
+            imageBorder.color = LevelEditor.current.CommandLineSelectedColor;
+        }
+        public override void SetVisualsSelected()
+        {
+            base.SetVisualsSelected();
+            imageBorder.color = LevelEditor.current.CommandLineSelectedColor;
         }
     }
 
@@ -276,6 +307,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
         public float OldSpeed = 0;
         public RawImage imageSlope;
         public RawImage imageBlock;
+        public Image imageFrame;
         public RectTransform rectSlope;
         public RectTransform rectBlock;
         public RectTransform rectFill;
@@ -289,23 +321,50 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             NewSpeed = speed;
             LerpTime = lerp;
             obj = ob;
+            InstantiateBase();
         }
 
-        public override void UpdateTime()
+        public override void SummonPropertiesPanel()
         {
-            base.UpdateTime();
+            base.SummonPropertiesPanel();
+            EditorUIControls.EditorUISlider newSlider;
+            newSlider = EditorCommandPropertiesPanel.Layout.AddSlider("New Speed", 0, LevelEditor.TempMaxScrollSpeed, false);
+            newSlider.slider.onValueChanged.AddListener(SetSpeed);
+            newSlider.slider.value = NewSpeed;
+            newSlider = EditorCommandPropertiesPanel.Layout.AddSlider("Lerp Time", 0, 20, false);
+            newSlider.slider.onValueChanged.AddListener(SetLerp);
+            newSlider.slider.value = LerpTime;
+        }
+
+        void SetSpeed(float f)
+        {
+            NewSpeed = f;
+            LevelEditor.RebuildScrollSpeedCache();
             UpdateTimelineVisuals();
+            if (LevelEditor.ScrollSpeeds.Count > ScrollSpeedIndex + 1)
+            {
+                LevelEditor.ScrollSpeeds[ScrollSpeedIndex + 1].UpdateTimelineVisuals();
+            }
         }
 
-        public override void DragTimeline(PointerEventData data)
+        void SetLerp(float f)
         {
-            base.DragTimeline(data);
+            LerpTime = f;
+            AvoidCollisions();
+            if (LevelEditor.ScrollSpeeds.Count > ScrollSpeedIndex + 1)
+            {
+                LevelEditor.ScrollSpeeds[ScrollSpeedIndex + 1].UpdateTimelineVisuals();
+            }
+            //TODO: test intersection with other scrollspeeds now that lerp has changed
+        }
 
+        void AvoidCollisions()
+        {
             float HighPosition = EditorTriggerTime;
             float LowPosition = EditorTriggerTime;
 
             float HighPositionReal = TriggerTime;
-            foreach(ScrollSpeedContainer container in LevelEditor.ScrollSpeeds)
+            foreach (ScrollSpeedContainer container in LevelEditor.ScrollSpeeds)
             {
                 if (IntersectsWithScroll(HighPosition, container))
                 {
@@ -339,7 +398,7 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                 }
                 //TODO: weird behavior when snapping through a level hold (RebuildScrollSpeedCache resyncs TriggerTime and EditorTriggerTime, snapping to slightly after the hold instead of right at the end of it)
                 //  probably snaps to X time after the hold, where X is the amount of overlap the previous scrollspeed overlaps the start of the hold
-                
+
             }
 
             LevelEditor.RebuildScrollSpeedCache();
@@ -350,6 +409,19 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                     ((InputTime <= container.EditorTriggerTime && InputTime + LerpTime >= container.EditorTriggerTime) ||
                     (InputTime >= container.EditorTriggerTime && InputTime <= container.EditorTriggerTime + container.LerpTime));
             }
+
+        }
+
+        public override void UpdateTime()
+        {
+            base.UpdateTime();
+            UpdateTimelineVisuals();
+        }
+
+        public override void DragTimeline(PointerEventData data)
+        {
+            base.DragTimeline(data);
+            AvoidCollisions();
         }
 
         public override void AddVisualsToTimeline()
@@ -384,15 +456,14 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
 
             UpdateTimelineVisuals();
 
-            Image image = obj.AddComponent<Image>();
-            image.sprite = LevelEditor.current.imageCommandFrame;
-            image.type = Image.Type.Sliced;
-            image.color = LevelEditor.current.ScrollSpeedNodeColor;
+            imageFrame = obj.AddComponent<Image>();
+            imageFrame.sprite = LevelEditor.current.imageCommandFrame;
+            imageFrame.type = Image.Type.Sliced;
+            SetVisualsIdle();
         }
 
         public override void UpdateTimelineVisuals()
         {
-            float TempMaxScrollSpeed = 40;
             base.UpdateTimelineVisuals();
             rect.anchorMax = new Vector2(1, (EditorTriggerTime + Mathf.Max(LerpTime, CommandThickness)) / LevelEditor.LevelDurationEditor);
             if (NewSpeed > OldSpeed)
@@ -404,21 +475,18 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
                 imageSlope.uvRect = new Rect(0, 0, 1, 1);
             }
 
-            float Midpoint = 1-(Mathf.Min(OldSpeed, NewSpeed) / TempMaxScrollSpeed);
-            float max = 1-(Mathf.Max(OldSpeed, NewSpeed) / TempMaxScrollSpeed); 
+            float Midpoint = 1-(Mathf.Min(OldSpeed, NewSpeed) / LevelEditor.TempMaxScrollSpeed);
+            float max = 1-(Mathf.Max(OldSpeed, NewSpeed) / LevelEditor.TempMaxScrollSpeed); 
             rectBlock.anchorMin = new Vector2(Midpoint, 0);
             rectSlope.anchorMax = new Vector2(Midpoint, 1);
             rectSlope.anchorMin = new Vector2(max, 0);
 
-
-            //TODO: case for OldSpeed and NewSpeed are both 0 (just fill the back of the node with a rectangle at all times?)
         }
 
         public void UpdateFill()
         {
             float TempMaxScrollSpeed = 40;
             rectFill.anchorMin = new Vector2(1-(NewSpeed / TempMaxScrollSpeed), rect.anchorMax.y);
-            //TODO: replace the following anchormax.y with the anchormin.y of the *next* scroll speed change (or 1, if we're the last chagne)
 
             if (ScrollSpeedIndex == LevelEditor.ScrollSpeeds.Count - 1)
             {
@@ -428,6 +496,22 @@ public class LevelEditorSpawnedCommand : MonoBehaviour, IPointerEnterHandler, IP
             {
                 rectFill.anchorMax = new Vector2(1, LevelEditor.ScrollSpeeds[ScrollSpeedIndex + 1].rect.anchorMin.y);
             }
+        }
+        public override void SetVisualsIdle()
+        {
+            base.SetVisualsIdle();
+            imageFrame.color = LevelEditor.current.ScrollSpeedNodeColor;
+        }
+
+        public override void SetVisualsHovered()
+        {
+            base.SetVisualsHovered();
+            imageFrame.color = LevelEditor.current.CommandLineSelectedColor;
+        }
+        public override void SetVisualsSelected()
+        {
+            base.SetVisualsSelected();
+            imageFrame.color = LevelEditor.current.CommandLineSelectedColor;
         }
     }
     public class SpawnedObjectContainer: LevelPositionalContainer
